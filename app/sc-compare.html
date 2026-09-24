@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>SC 档位对比 · CONTROL</title>
+  <link rel="stylesheet" href="sc-compare.css?v=1">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="monitor.html"><span aria-hidden="true">▽</span> CONTROL</a>
+    <span class="page-name">SC 档位对比</span>
+    <button id="pure">纯画面</button>
+  </header>
+  <main class="workbench">
+    <section class="preview" aria-label="SC 与固定上下文预览">
+      <div class="preview-head"><div><span class="eyebrow">异常通讯 / SC</span><h1 id="tierTitle">¥ 100</h1></div><span id="phase" class="phase" role="status">准备中</span></div>
+      <div class="surface"><canvas id="comparison" width="1140" height="1410" role="img" aria-label="SC 档位对比，包含固定的上下文弹幕"></canvas></div>
+      <div class="transport"><button id="replay" class="primary">重新播放</button><button id="pause" aria-pressed="false">暂停</button><button id="stable">查看稳定段</button><button id="exit" disabled>立即退场</button><output id="elapsed">0.00 s</output></div>
+      <p id="renderStatus" class="render-status" role="status">正在准备原生特效…</p>
+    </section>
+    <aside class="settings" aria-label="对比设置">
+      <div class="section-number">01 / 档位</div>
+      <h2>只改变 SC 档位</h2>
+      <p class="muted">相同的弹幕、正文、尺寸与初始流场。直接比较各档红纹的范围、层次与折射。</p>
+      <label class="field" for="tier">SC 金额</label>
+      <select id="tier"><option value="2">¥ 2</option><option value="30">¥ 30</option><option value="50">¥ 50</option><option value="100" selected>¥ 100</option><option value="500">¥ 500</option><option value="1000">¥ 1000</option><option value="2000">¥ 2000</option></select>
+      <div class="tier-navigation"><button id="lower">← 上一档</button><button id="higher">下一档 →</button></div>
+      <div class="section-number section-gap">02 / 动画</div>
+      <label class="toggle"><span><strong>开启进场</strong><small>从起势、蓄势到余波显形</small></span><input id="entrance" type="checkbox"></label>
+      <label class="toggle"><span><strong>开启退场</strong><small>停留结束后收拢、消散</small></span><input id="outro" type="checkbox"></label>
+      <label class="field" for="hold">稳定停留（秒）</label>
+      <input id="hold" type="number" min="1" max="600" step="1" value="8" disabled>
+      <p id="timingNote" class="muted timing-note">当前持续展示稳定流纹，不自动消失。</p>
+      <div class="context-note"><span class="context-mark" aria-hidden="true">▽</span><div><strong>上下文保持一致</strong><p>四条普通弹幕始终相同，保留原生的折射和延后让位，退场后回到原位。</p></div></div>
+      <p class="shortcut">空格 暂停 / 继续 · R 重播 · Esc 返回控件</p>
+    </aside>
+  </main>
+  <button id="showControls" class="show-controls" hidden>显示控件 · Esc</button>
+  <script src="theme-keyframes.js"></script>
+  <script src="theme-scene-components.js"></script>
+  <script src="theme-editor-model.js"></script>
+  <script src="normal-notice-engine.js"></script>
+  <script src="sc-reading.js"></script>
+  <script src="sc-component-parts.js"></script>
+  <script src="sc-lifecycle.js"></script>
+  <script src="sc-flow-field.js"></script>
+  <script src="hiss-simulation-engine.js"></script>
+  <script src="monitor-catalog.js"></script>
+  <script src="sc-compare.js?v=1"></script>
+</body>
+</html>

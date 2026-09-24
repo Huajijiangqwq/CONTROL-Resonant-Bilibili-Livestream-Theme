@@ -1,0 +1,42 @@
+@font-face {
+  font-family: NPDisplay;
+  src: url('now-playing-fonts/anton.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: NPCondensed;
+  src: url('now-playing-fonts/robotocondensed.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: NPCJK;
+  src: url('now-playing-fonts/notosanscjk-black.woff2') format('woff2');
+  font-weight: 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: NPArabic;
+  src: url('now-playing-fonts/notosansarabic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: NPHebrew;
+  src: url('now-playing-fonts/notosanshebrew.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: NPDevanagari;
+  src: url('now-playing-fonts/notosansdevanagari.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: NPThai;
+  src: url('now-playing-fonts/notosansthai.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}

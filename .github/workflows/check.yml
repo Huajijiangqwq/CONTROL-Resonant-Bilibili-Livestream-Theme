@@ -1,0 +1,22 @@
+name: Beta checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm run check
+      - run: npm test
+      - name: Compile Windows audio capture
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/compile-audio.ps1
+      - run: npm run package

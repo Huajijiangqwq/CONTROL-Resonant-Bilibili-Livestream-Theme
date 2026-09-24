@@ -1,0 +1,26 @@
+{
+  "name": "control-resonant-bilibili-theme",
+  "version": "0.1.0-beta.1",
+  "description": "Control Resonant-bilibili直播间主题：可定制的 OBS 主题、弹幕编辑器与音乐可视化。",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "preview": "node scripts/serve.js --preview-only",
+    "stop": "node scripts/stop.js",
+    "check": "node scripts/check.js",
+    "test": "node --test tests/*.test.js",
+    "package": "node scripts/package.js",
+    "start:server": "node scripts/serve.js",
+    "build:desktop": "node scripts/build-desktop.js",
+    "build:audio": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/compile-audio.ps1"
+  },
+  "main": "desktop/main.js",
+  "productName": "Control Resonant",
+  "devDependencies": {
+    "electron": "44.4.3"
+  }
+}

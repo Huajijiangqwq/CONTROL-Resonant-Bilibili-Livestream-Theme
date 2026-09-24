@@ -1,0 +1,353 @@
+/* Scene coordinates remain in 1920 x 1080; the viewport scales the whole scene. */
+.layout-select {
+  margin-bottom: 14px !important;
+}
+.layout-choices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.layout-choices button {
+  padding: 9px 3px;
+  font-size: 11px;
+  background: #161c18;
+  border-color: #495249;
+}
+.layout-choices button[aria-pressed='true'] {
+  color: #121810;
+  background: #e5e7dc;
+  border-color: #e5e7dc;
+}
+.layout-glyph {
+  display: block;
+  position: relative;
+  width: 46px;
+  height: 27px;
+  margin: 0 auto 7px;
+  border: 1px solid currentColor;
+  opacity: 0.8;
+}
+.layout-glyph::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 29px;
+  height: 17px;
+  border: 1px solid currentColor;
+}
+.layout-glyph::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  bottom: 3px;
+  width: 7px;
+  border-left: 1px solid currentColor;
+}
+[data-layout-choice='game'] .layout-glyph::before {
+  width: 34px;
+  height: 20px;
+}
+[data-layout-choice='game'] .layout-glyph::after {
+  width: 3px;
+}
+.layout-geometry {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #cbd4c7;
+  padding: 9px 10px;
+  border-left: 2px solid #b8473c;
+  background: #151c17;
+  margin: 10px 0;
+}
+.scene .game-window {
+  z-index: 0;
+}
+.scene .frame-material {
+  z-index: 1;
+}
+.scene .chat-panel,
+.scene .game-logos,
+.scene .broadcast-timer {
+  z-index: 2;
+}
+.scene .game-trace {
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+}
+.scene[data-layout='game'] .chat-heading {
+  left: 16px;
+  right: 15px;
+  top: 17px;
+  font-size: 27px;
+  line-height: 39px;
+}
+.scene[data-layout='game'] .chat-rule::before {
+  width: 113px;
+  height: 4px;
+}
+.scene[data-layout='game'] .chat-feed {
+  top: 74px;
+  bottom: 10px;
+}
+.scene[data-layout='game'] .chat-feed iframe {
+  left: -40px;
+  width: calc(100% + 80px);
+}
+.scene[data-layout='game'] .broadcast-header {
+  top: 10px;
+  height: 40px;
+  gap: 25px;
+}
+.scene[data-layout='game'] #hostText {
+  font-size: 30px;
+}
+.scene[data-layout='game'] #topicText {
+  font-size: 23px;
+  line-height: 35px;
+}
+.scene[data-layout='game'] .on-air {
+  font-size: 22px;
+}
+.scene[data-layout='game'] .broadcast-timer {
+  left: 34px;
+  top: 1013px;
+  height: 34px;
+  font-size: 20px;
+  gap: 9px;
+}
+.scene[data-layout='game'] .broadcast-timer > span {
+  display: none;
+}
+.scene[data-layout='game'] .broadcast-timer time {
+  font-size: 23px;
+  font-weight: 500;
+}
+.scene[data-layout='game'] .broadcast-timer svg {
+  width: 23px;
+  height: 23px;
+  stroke-width: 1.5;
+}
+.scene[data-layout='game'] .game-logos.control-footer {
+  left: 1478px;
+  top: 1008px;
+  width: 410px;
+  height: 48px;
+  --logo-scale: 0.303703704;
+}
+.scene[data-layout='game'] .logo-signal {
+  bottom: 0;
+  width: 80px;
+}
+.scene[data-layout='game'] .now-playing-slot {
+  left: 34px;
+  top: 800px;
+  width: 400px;
+  height: 116.6667px;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .game-window {
+  outline: none !important;
+  background: transparent;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .game-window .corner,
+.scene:is([data-layout='split'], [data-layout='custom']) .game-trace,
+.scene:is([data-layout='split'], [data-layout='custom']) .scene-background,
+.scene:is([data-layout='split'], [data-layout='custom']) .frame-material,
+.scene:is([data-layout='split'], [data-layout='custom']) .print-rules,
+.scene:is([data-layout='split'], [data-layout='custom']) .broadcast-timer {
+  display: none;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .broadcast-header {
+  left: auto;
+  right: 32px;
+  top: 20px;
+  width: 485px;
+  height: 33px;
+  justify-content: flex-end;
+  gap: 17px;
+  padding: 0;
+  text-shadow:
+    0 1px 5px #000,
+    0 0 12px #0009;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) #hostText {
+  font-size: 23px;
+  line-height: 33px;
+  max-width: 315px;
+  font-weight: 650;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .header-triangle {
+  border-left-width: 8px;
+  border-right-width: 8px;
+  border-top-width: 14px;
+  margin: 0;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .on-air {
+  font-size: 20px;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .on-air i {
+  width: 12px;
+  height: 12px;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) #topicText,
+.scene:is([data-layout='split'], [data-layout='custom']) .header-separator,
+.scene:is([data-layout='split'], [data-layout='custom']) .header-rule,
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-heading,
+.scene:is([data-layout='split'], [data-layout='custom']) .logo-signal {
+  display: none;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .game-logos.control-footer {
+  left: 1468px;
+  top: 64px;
+  width: 420px;
+  height: 38px;
+  --logo-scale: 0.311111111;
+  filter: drop-shadow(0 1px 3px #0009);
+}
+/* The optional note occupies its own row, never the host/status space. */
+.scene[data-layout='split'][data-split-topic='true'] #topicText:not([hidden]) {
+  display: block;
+  position: absolute;
+  top: 88px;
+  right: 0;
+  max-width: 650px;
+  font-size: 23px;
+  line-height: 34px;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-panel {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-feed {
+  inset: 0;
+  background: transparent;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-feed iframe {
+  color-scheme: light;
+  background: transparent;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-feed::after {
+  display: none;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .now-playing-slot {
+  left: 42px;
+  top: 824px;
+  width: 400px;
+  height: 116.6667px;
+}
+.layout-transition {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  z-index: 5;
+  pointer-events: none;
+  overflow: visible;
+}
+.layout-transition rect {
+  fill: none;
+  stroke: #f0ece0;
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-transition {
+    display: none;
+  }
+}
+
+[data-layout-choice='split'] .layout-glyph::before {
+  inset: 2px;
+  width: auto;
+  height: auto;
+}
+[data-layout-choice='split'] .layout-glyph::after {
+  top: 5px;
+  bottom: auto;
+  height: 10px;
+  width: 5px;
+  background: currentColor;
+  box-shadow:
+    -17px -1px 0 -1px currentColor,
+    -30px 13px 0 1px currentColor;
+  opacity: 0.65;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-feed iframe {
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .chat-panel {
+  pointer-events: none;
+  z-index: 4;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .now-playing-slot {
+  left: 42px;
+  top: 622px;
+}
+.scene:is([data-layout='split'], [data-layout='custom']) .game-logos.control-footer {
+  left: 1528px;
+  top: 64px;
+  width: 360px;
+  height: 34px;
+  --logo-scale: 0.266666667;
+}
+.zone-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+  display: none;
+}
+.scene:is([data-layout='split'], [data-layout='custom'])[data-zone-guides='true'] .zone-guides {
+  display: block;
+}
+.zone-guide {
+  position: absolute;
+  border: 1px dashed #e4e5d966;
+  background: #1015120a;
+  color: #eeeee7;
+  font-size: 15px;
+}
+.zone-guide span {
+  position: absolute;
+  left: 0;
+  top: -25px;
+  padding: 3px 7px;
+  background: #151914d9;
+  letter-spacing: 1px;
+  font-size: 12px;
+}
+.obs .zone-guides {
+  display: none !important;
+}
+/* Material keeps rendering throughout the move; visibility follows the same curve. */
+.scene[data-layout-switching] .game-window {
+  outline: 1.6px solid rgb(212 210 196 / var(--layout-border-alpha, 1)) !important;
+}
+.scene[data-layout-switching] .game-window .corner,
+.scene[data-layout-switching] .game-trace {
+  display: block;
+  visibility: visible;
+}
+.scene[data-layout-switching] .game-trace {
+  opacity: var(--layout-border-alpha, 1);
+}
+.scene[data-layout-switching] .game-window .corner {
+  border-color: rgb(238 240 222 / var(--layout-border-alpha, 1));
+}
+.scene[data-layout-switching] .zone-guides {
+  display: none;
+}
+.scene[data-layout-switching] .chat-panel,
+.scene[data-layout-switching] .broadcast-header,
+.scene[data-layout-switching] .game-logos {
+  will-change: opacity, transform;
+}

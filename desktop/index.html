@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src http://127.0.0.1:*; connect-src 'none'; object-src 'none'; base-uri 'none'">
+<title>Control Resonant · 直播主题</title><link rel="stylesheet" href="shell.css"></head>
+<body>
+<aside class="rail"><div class="brand"><img src="icon.png" alt=""><div>CONTROL<br><span>RESONANT</span></div></div><p class="edition">直播间主题 <b>BETA 1</b></p>
+<nav aria-label="工作区">
+<button data-page="live" class="active"><span class="nav-number">01</span><span class="nav-label">直播预览</span></button>
+<button data-page="simulation"><span class="nav-number">02</span><span class="nav-label">消息模拟</span></button>
+<button data-page="music"><span class="nav-number">03</span><span class="nav-label">音乐皮肤</span></button>
+<button data-page="monitor"><span class="nav-number">04</span><span class="nav-label">组件监视面板</span></button>
+<div class="nav-experimental">
+<button data-page="theme"><span class="nav-number">05</span><span class="nav-label">主题编辑器<small>【实验功能】</small></span></button>
+<button data-page="chat"><span class="nav-number">06</span><span class="nav-label">弹幕编辑器<small>【实验功能】</small></span></button>
+</div></nav>
+<div class="rail-bottom"><button data-page="about">关于与许可 <span>↗</span></button><div class="status"><i id="statusDot"></i><span id="serviceLabel">服务准备中</span></div><p>关闭窗口后留在托盘<br>OBS 服务继续运行</p></div></aside>
+<main><header><div><small id="sectionEyebrow">LOCAL WORKSPACE</small><h1 id="sectionTitle">直播预览</h1></div><div class="header-actions"><span id="version">0.1.0-beta.1</span><button id="openBrowser" hidden>在浏览器打开 ↗</button></div></header>
+<section id="serviceScreen" class="panel service-screen" aria-live="polite"><div class="service-card"><div><small>LOCAL SERVICES</small><h2 id="serviceTitle">正在启动本地服务…</h2><p id="serviceDetail">就绪后自动打开直播预览。</p></div><button id="retry" hidden>重试启动</button></div></section>
+<section id="about" class="panel about" hidden><p class="ai-banner"><b>AI 生成说明</b><br>本项目代码使用 GPT-6 Astra 生成，部分素材使用 image 生成。</p><p class="muted">image 还用于开发阶段的视觉参考；历史生成参考图未随本包分发。第三方代码、字体与用户素材单独标注，不属于项目原创内容。</p><h2>Control Resonant<br><span>bilibili直播间主题</span></h2><p>一个以《Control / 控制》的视觉语言为灵感的 OBS 主题与本地编辑工具。</p><div class="license-grid"><article><small>CODE</small><h3>MIT</h3><p>原创代码允许修改、商用和再分发，保留版权与许可声明。MIT 没有“2.0”版本。</p><button data-doc="mit">阅读代码许可 ↗</button></article><article><small>DOCUMENTS & ORIGINAL ART</small><h3>CC BY 4.0</h3><p>原创文档与清单中的自绘素材采用署名许可。第三方字体、代码与品牌资源保留各自许可。</p><button data-doc="cc">阅读 CC 许可 ↗</button></article></div><h3>音乐识别与第三方致谢</h3><p>内置 Windows SMTC 适配器读取系统提供的歌曲、封面和进度。同时兼容 Widdit 的 <b>now-playing-service</b>（MIT），可在音乐皮肤点击「自动下载并配置」，从原作者官方 GitHub 安装并连接。未随包捆绑该项目的安装器或完整后端。</p><p>桌面运行环境使用 Electron；频谱使用 fft.js；噪声参考 psrdnoise；字体保留 SIL OFL 1.1。完整版本、版权与来源见随包清单。</p><div class="doc-buttons"><button data-doc="usage">使用说明 ↗</button><button data-doc="credits">第三方清单 ↗</button><button data-doc="music">音乐集成说明 ↗</button><button data-doc="licenses">素材来源 ↗</button><button data-doc="readme">项目说明 ↗</button><button id="dataFolder">打开数据文件夹 ↗</button></div><p class="early-note">编辑器处于极早期版本。本项目与 Remedy、Bilibili、OBS 无隶属或合作关系。</p><button id="quit" class="quiet">退出客户端并停止本地服务</button></section>
+<section id="editors" hidden aria-label="编辑工作区"></section><div id="toast" role="status" hidden></div></main><script src="shell.js"></script></body></html>
+

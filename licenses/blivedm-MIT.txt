@@ -1,6 +1,12 @@
+# 接入协议参考
+
+Bilibili 网页消息协议、WBI 混排表和礼物字段参考 xfgryujk/blivedm：
+https://github.com/xfgryujk/blivedm
+版本：3bf17fe862b8c2fc6bc04c81c3f0c5db95de93d6
+
 MIT License
 
-Copyright (c) 2026 Control Resonant-bilibili直播间主题 contributors
+Copyright (c) 2018 xfgryujk
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

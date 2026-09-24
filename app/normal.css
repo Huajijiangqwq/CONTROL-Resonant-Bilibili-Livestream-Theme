@@ -1,0 +1,32 @@
+textarea {
+  display: block;
+  width: 100%;
+  background: #101711;
+  border: 1px solid #3a473c;
+  color: #edf0e9;
+  border-radius: 3px;
+  padding: 9px 10px;
+  margin-top: 7px;
+  font:
+    13px/1.7 'Microsoft YaHei',
+    'Segoe UI',
+    sans-serif;
+  resize: vertical;
+  min-height: 96px;
+}
+textarea:focus-visible {
+  outline: 2px solid #91d5c2;
+  outline-offset: 3px;
+}
+.intro h1 {
+  font-size: 25px;
+}
+.stage {
+  overflow: auto;
+}
+#canvasShell {
+  margin: auto;
+}
+.pure .stage {
+  overflow: auto;
+}

@@ -1,0 +1,165 @@
+.layout-choices {
+  grid-template-columns: repeat(2, 1fr);
+}
+[data-layout-choice='custom'] .layout-glyph::before {
+  width: 16px;
+  height: 11px;
+  left: 4px;
+  top: 5px;
+}
+[data-layout-choice='custom'] .layout-glyph::after {
+  border: 1px solid currentColor;
+  width: 12px;
+  height: 7px;
+  top: 15px;
+  right: 3px;
+}
+.custom-extras {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.custom-element {
+  position: absolute;
+  display: block;
+  object-fit: contain;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  line-height: 1.2;
+  text-shadow: 0 1px 4px #000c;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+.custom-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  outline: none;
+}
+.custom-handle {
+  position: absolute;
+  border: 1.5px dashed #cad5c999;
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  background: #e3ede603;
+}
+.custom-handle[data-selected='true'] {
+  border: 2px solid #e95850;
+  background: #e958500a;
+  z-index: 2;
+}
+.custom-handle[data-element='game'] {
+  pointer-events: none;
+}
+.custom-handle[data-element='game'] .custom-handle-name,
+.custom-handle[data-element='game'] i {
+  pointer-events: auto;
+}
+.custom-handle-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 4px 8px;
+  background: #17201ce6;
+  color: #ebeee3;
+  font-size: 17px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.custom-handle[data-selected='true'] .custom-handle-name {
+  background: #98342e;
+}
+.custom-handle i {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  right: -4px;
+  bottom: -4px;
+  cursor: nwse-resize;
+  background: #ecede1;
+  border: 4px solid #393b30;
+  box-shadow: 0 0 0 1px #ecede1;
+}
+.scene[data-layout='custom'] [data-custom-hidden='true'] {
+  display: none !important;
+}
+.scene[data-layout='custom'] .broadcast-timer {
+  display: flex;
+  text-shadow: 0 1px 5px #000;
+}
+.scene[data-layout='custom'] .broadcast-header {
+  overflow: hidden;
+  --custom-header-scale: 1;
+}
+.scene[data-layout='custom'] #hostText {
+  font-size: calc(23px * var(--custom-header-scale));
+  line-height: 1.1;
+  max-width: 100%;
+}
+.scene[data-layout='custom'] .on-air {
+  font-size: calc(20px * var(--custom-header-scale));
+  gap: 8px;
+}
+.scene[data-layout='custom'] .on-air i {
+  width: calc(12px * var(--custom-header-scale));
+  height: calc(12px * var(--custom-header-scale));
+}
+.pure .custom-handles,
+.obs .custom-handles {
+  display: none !important;
+}
+.editor .file-button {
+  position: relative;
+  display: block;
+  text-align: center;
+  border: 1px solid #454a46;
+  padding: 8px 6px;
+  font-size: 12px;
+  color: #eceee9;
+  cursor: pointer;
+  background: #262a27;
+  border-radius: 3px;
+  margin: 0;
+  overflow: hidden;
+}
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+#customEditor .input-action select {
+  margin: 0;
+  font-size: 11px;
+  padding: 7px;
+  min-width: 0;
+}
+#customEditor .checkbox {
+  margin-bottom: 12px;
+}
+#customEditor .hint {
+  margin-bottom: 10px;
+}
+.scene[data-layout='custom'] .broadcast-timer {
+  --custom-timer-scale: 1;
+  font-size: calc(25px * var(--custom-timer-scale));
+  gap: calc(12px * var(--custom-timer-scale));
+  overflow: hidden;
+}
+.scene[data-layout='custom'] .broadcast-timer time {
+  font-size: calc(31px * var(--custom-timer-scale));
+}
+.scene[data-layout='custom'] .broadcast-timer svg {
+  width: calc(28px * var(--custom-timer-scale));
+  height: calc(28px * var(--custom-timer-scale));
+  flex: none;
+}
+img.custom-element:not([src]) {
+  visibility: hidden;
+}
+.scene[data-layout='custom'] .zone-guides {
+  display: none !important;
+}

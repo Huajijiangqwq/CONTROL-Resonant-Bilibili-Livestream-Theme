@@ -1,0 +1,243 @@
+/* Matte print surfaces, all contained in the existing 1920 x 1080 layout. */
+.frame-material {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.surface-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 1920px;
+  height: 1080px;
+  opacity: 0.88;
+}
+.resonance-field {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.chat-feed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background-image: var(--ink-texture);
+  opacity: 0.14;
+  pointer-events: none;
+}
+.junction-resonance {
+  left: 950px;
+  top: 0;
+  width: 710px;
+  height: 420px;
+}
+.foot-resonance {
+  left: 0;
+  top: 700px;
+  width: 650px;
+  height: 360px;
+}
+.broadcast-header #topicText {
+  background-color: #eeeee7;
+  background-image: var(--paper-texture), linear-gradient(112deg, #fffff82b, #a9a69510);
+  box-shadow:
+    0 1px 0 #ffffed48,
+    0 -1px 0 #4b514331;
+  color: #101210;
+}
+.header-rule {
+  background: linear-gradient(
+    90deg,
+    #a9ada1a8,
+    #a9ada164 24%,
+    #a9ada13d 53%,
+    #a9ada17a 86%,
+    #a9ada12e
+  );
+}
+.chat-panel {
+  border: 1.6px solid #c9c9bfe3;
+  background-color: #0e100f;
+  background-image: var(--ink-texture);
+  box-shadow:
+    inset 1px 0 0 #d9dec512,
+    inset -1px 0 0 #0008;
+}
+.chat-heading {
+  color: #f0f0e9;
+  text-shadow: 0.5px 0 #f0e6d81c;
+}
+.chat-rule {
+  background: linear-gradient(90deg, #c1c1ad86, #8e978a6b 74%, #9a9e913d);
+}
+.chat-rule:before {
+  background: linear-gradient(90deg, #d92b31, #ee383b 67%, #f366584f);
+  box-shadow: 0 1px 0 #f9856c17;
+}
+.game-window {
+  outline: 1.6px solid #d4d2c4e6;
+}
+.game-window .corner {
+  border-color: #eef0de;
+  opacity: 0.84;
+}
+.print-rules {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  fill: none;
+  stroke-linecap: square;
+  pointer-events: none;
+}
+.print-rules .ink-light {
+  stroke: #eee9d3;
+  stroke-width: 1.1;
+  opacity: 0.76;
+}
+.print-rules .ink-break {
+  stroke: #111510;
+  stroke-width: 1.4;
+  opacity: 0.64;
+}
+.broadcast-timer {
+  color: #dbdfd3;
+}
+.broadcast-timer time {
+  color: #f1f1e8;
+}
+.broadcast-statement {
+  color: #eeeee6;
+  text-shadow: 0 1px #8e91812b;
+}
+.scene[data-motion='off'] .resonance-field {
+  opacity: 0.65;
+}
+.editor .material-control {
+  margin: 16px 0 4px;
+}
+.material-control > span {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.material-control output {
+  color: #e2e7db;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+.notice-signal {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 161px;
+  height: 2px;
+  background: #f7eedc;
+  opacity: 0;
+  pointer-events: none;
+}
+.scene[data-notice='sc'] .notice-signal {
+  background: #ff684d;
+  box-shadow: 0 0 9px #ed3c3940;
+}
+.scene[data-notice='fleet'] .notice-signal {
+  background: #e7edf6;
+}
+.scene[data-motion='off'] .notice-signal {
+  display: none;
+}
+.editor .material-control input[type='range'] {
+  padding: 0;
+  border: 0;
+  height: 22px;
+  background: transparent;
+  accent-color: #c85c51;
+  cursor: pointer;
+}
+
+/* Fragmented ink highlights belong to the existing frame and red rule. */
+.game-trace rect {
+  stroke: #eeeade;
+  stroke-width: 2.1;
+  stroke-dasharray: 18 5 7 8 30 932;
+}
+.chat-sweep {
+  background: linear-gradient(90deg, transparent, #df424857 33%, #ece7dba8 75%, transparent);
+  box-shadow: 0 0 7px #ed443b33;
+}
+
+.audio-control meter {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin-top: 16px;
+  accent-color: #df443f;
+}
+.audio-control #audioToggle[aria-pressed='true'] {
+  border-color: #c25248;
+  background: #452922;
+}
+.audio-control #audioTest {
+  font-size: 12px;
+}
+
+/* Keep the broadcast labels above the enlarged optical fields. */
+.broadcast-header {
+  z-index: 3;
+}
+.audio-bands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.audio-bands label {
+  font-size: 12px !important;
+  margin: 0 !important;
+}
+.audio-bands meter {
+  margin-top: 6px;
+  height: 7px;
+}
+
+.audio-custom {
+  margin-top: 16px;
+  border-top: 1px solid #46504b;
+  padding-top: 14px;
+}
+.audio-custom summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.audio-band-editor {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #424b46;
+  min-width: 0;
+}
+.audio-band-editor legend {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dedfd7;
+}
+.audio-band-editor label {
+  font-size: 12px;
+  margin-top: 9px !important;
+}
+.band-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.audio-band-editor input,
+.audio-band-editor select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.audio-band-editor button {
+  width: 100%;
+  margin-top: 10px;
+  font-size: 12px;
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+<defs><linearGradient id="wall" x2="0" y2="1"><stop stop-color="#1a211e"/><stop offset="1" stop-color="#090d0c"/></linearGradient><radialGradient id="red"><stop stop-color="#792821" stop-opacity=".5"/><stop offset="1" stop-color="#792821" stop-opacity="0"/></radialGradient><pattern id="grid" width="120" height="120" patternUnits="userSpaceOnUse"><path d="M120 0H0V120" fill="none" stroke="#88988e" stroke-opacity=".065"/></pattern></defs>
+<rect width="1920" height="1080" fill="url(#wall)"/><rect width="1920" height="1080" fill="url(#grid)"/><ellipse cx="960" cy="480" rx="730" ry="450" fill="url(#red)"/>
+<g fill="none" stroke="#6c766e" stroke-opacity=".2"><path d="M0 0L700 310H1220L1920 0M0 1080L700 770H1220L1920 1080M700 310V770M1220 310V770"/><path d="M790 360H1130V720H790Z"/></g>
+<path d="M916 443H1004L960 520Z" fill="none" stroke="#b46658" stroke-width="2"/>
+<text x="960" y="590" fill="#d7dad1" text-anchor="middle" font-family="sans-serif" font-size="30" letter-spacing="7">GAME CAPTURE</text><text x="960" y="633" fill="#8b968d" text-anchor="middle" font-family="sans-serif" font-size="18">1920 × 1080 · PREVIEW PLACEHOLDER</text>
+</svg>

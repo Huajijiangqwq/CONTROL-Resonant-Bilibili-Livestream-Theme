@@ -1,0 +1,28 @@
+/* Official dual-language artwork; preserve each original crop aspect ratio. */
+.game-logos.control-footer {
+  --logo-scale: 1;
+  left: 48px;
+  top: 947px;
+  width: 1350px;
+  height: 90px;
+  display: block;
+}
+.control-logo-lockup {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1350px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  transform: translateY(-50%) scale(var(--logo-scale));
+  transform-origin: left center;
+}
+.scene.has-now-playing .game-logos.control-footer {
+  --logo-scale: 0.5466666667;
+  left: 664px;
+  top: 945px;
+  width: 738px;
+}

@@ -1,0 +1,6 @@
+app/now-playing-fft.js
+app/theme-projects/
+app/theme-live/
+.runtime/
+dist/
+node_modules/
