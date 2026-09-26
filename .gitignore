@@ -18,3 +18,5 @@ Thumbs.db
 
 bilibili-*-credentials.enc*
 external-now-playing/
+credential-key.enc*
+__pycache__/

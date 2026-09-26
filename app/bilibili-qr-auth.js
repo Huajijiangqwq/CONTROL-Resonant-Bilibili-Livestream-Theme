@@ -93,7 +93,7 @@ function createQrAuth(store, { fetch: request = fetch, now = Date.now } = {}) {
           else if (data.code === 0) {
             const value = await resolveSession(response, data, q);
             if (current !== q) return { phase: 'cancelled', message: '二维码已取消。' };
-            try { store.save(value); } catch { throw Error('登录成功，但本机加密保存失败。请检查 Windows 账户权限后重试。'); }
+            try { store.save(value); } catch { throw Error('登录成功，但本机加密保存失败。请检查系统账户或钥匙串权限后重试。'); }
             q.phase = 'success'; q.key = ''; q.message = '登录成功，已在本机加密保存。填写房间号后即可连接。';
           } else throw Error('登录未完成，请重新生成二维码。');
         } catch (e) {

@@ -212,6 +212,10 @@
   }
   function applyState(state) {
     connected = true;
+    if(state.builtinLabel){$('musicProvider').options[0].textContent=state.builtinLabel; $('musicProvider').dataset.builtinLabel=state.builtinLabel;}
+    if(state.platform==='darwin'){
+      const setup=$('setupNowPlaying');if(setup){const box=setup.closest('.upstream-setup');const credit=box.querySelector('a[href="https://github.com/Widdit"]')?.closest('p');if(credit)box.before(credit);setup.hidden=true;box.hidden=true;}
+    }
     applySettings(state.config);
     track = state.track;
     audio = state.audio || {};
@@ -233,7 +237,7 @@
     }
     $('musicStatus').textContent =
       state.musicError ||
-      (track.connected ? (settings.musicProvider === 'builtin' ? 'Windows 内置识别 · 自动同步歌曲和进度' : '已连接 Now Playing · 自动同步歌曲和进度') : '正在连接歌曲服务…');
+      (track.connected ? (settings.musicProvider === 'builtin' ? ($('musicProvider').dataset.builtinLabel||'内置识别')+' · 自动同步歌曲和进度' : '已连接 Now Playing · 自动同步歌曲和进度') : '正在连接歌曲服务…');
     syncTrack();
   }
   const events = new EventSource(base + '/events');
@@ -245,7 +249,7 @@
     track = JSON.parse(event.data);
     syncTrack();
     $('musicStatus').textContent = track.connected
-      ? (settings.musicProvider === 'builtin' ? 'Windows 内置识别 · 自动同步歌曲和进度' : '已连接 Now Playing · 自动同步歌曲和进度')
+      ? (settings.musicProvider === 'builtin' ? ($('musicProvider').dataset.builtinLabel||'内置识别')+' · 自动同步歌曲和进度' : '已连接 Now Playing · 自动同步歌曲和进度')
       : '歌曲服务已断开，请检查软件是否打开。';
   });
   events.addEventListener('audio', (event) => {

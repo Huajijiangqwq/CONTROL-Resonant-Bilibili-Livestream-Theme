@@ -148,6 +148,7 @@ function createPreviewServer({
         /^bilibili-(?:server|protocol|qr-auth|session-store|open-(?:store|protocol|relay))\.js$/i.test(relative) ||
         /^(?:external-now-playing(?:[\\/]|$)|now-playing-setup\.js$)/i.test(relative) ||
         /(?:^|[\\/])bilibili-(?:open|session)-credentials\.enc(?:\.tmp)?$/i.test(relative) ||
+        /(?:^|[\\/])credential-key\.enc(?:\.tmp)?$/i.test(relative) ||
         !file.startsWith(root + path.sep) ||
         relative.split(/[\\/]/).some((x) => x.startsWith('.')) ||
         !types[path.extname(file).toLowerCase()]

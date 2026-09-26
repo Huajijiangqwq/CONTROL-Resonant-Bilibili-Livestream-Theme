@@ -1,5 +1,5 @@
 'use strict';
-const {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,shell,clipboard,utilityProcess,session}=require('electron');
+const {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,shell,clipboard,utilityProcess,session,safeStorage,desktopCapturer}=require('electron');
 const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 const {pageUrl,readConfig,saveConfig}=require('./core');
 const root=path.resolve(__dirname,'..');
@@ -8,7 +8,7 @@ const profile=process.argv.find(x=>x.startsWith('--profile='));
 if(profile)app.setPath('userData',path.resolve(profile.slice(10)));
 app.setAppUserModelId('ControlResonant.ThemeStudio');
 const hasLock=app.requestSingleInstanceLock();
-let win,tray,child,exiting=false;
+let win,tray,child,macAudio,exiting=false;
 let state={status:'starting',message:'正在启动本地服务…',base:'',port:null,version:require('../package.json').version};
 let logPath;
 function log(message){if(logPath)fs.appendFileSync(logPath,new Date().toISOString()+' '+String(message).slice(0,3000)+'\n');}
@@ -23,19 +23,26 @@ function launchServices(){
     env:{...process.env,CONTROL_DATA:path.join(userData,'data'),CONTROL_PORT:config.port?String(config.port):''},
   });
   child=proc;
+  if(process.platform==='darwin'){
+    let credentialKey='';
+    try{credentialKey=require('./credential-key').loadKey(safeStorage,userData).toString('base64');}catch{log('Keychain unavailable; credential persistence disabled.');}
+    proc.postMessage({type:'bootstrap',credentialKey});
+  }
   proc.stdout?.on('data',chunk=>log(chunk));proc.stderr?.on('data',chunk=>log(chunk));
   proc.on('message',message=>{
+    if(message.type==='mac-audio-control'&&process.platform==='darwin'){void macAudio?.setEnabled(message.enabled);return;}
     if(message.type==='ready'){
       saveConfig(userData,{...config,port:message.port});
       publish({status:'ready',message:'本地服务已就绪',base:message.base,port:message.port});
     } else if(message.type==='error')publish({status:'error',message:message.message,base:''});
   });
-  proc.on('exit',code=>{if(child===proc)child=null;log('Services exit '+code);if(!exiting&&state.status!=='error')publish({status:'error',message:'本地服务已停止，请点击重试。',base:''});});
+  proc.on('exit',code=>{if(child===proc)child=null;void macAudio?.setEnabled(false);log('Services exit '+code);if(!exiting&&state.status!=='error')publish({status:'error',message:'本地服务已停止，请点击重试。',base:''});});
 }
 function trusted(event){return win&&!win.isDestroyed()&&event.sender===win.webContents&&event.senderFrame===win.webContents.mainFrame&&event.senderFrame.url===pathToFileURL(path.join(__dirname,'index.html')).href;}
 function handle(name,callback){ipcMain.handle(name,(event,...args)=>{if(!trusted(event))throw Error('未授权的窗口');return callback(...args);});}
 async function quit(){
   if(exiting)return;exiting=true;
+  macAudio?.close();
   if(child){child.postMessage({type:'stop'});const old=child;await new Promise(resolve=>{old.once('exit',resolve);setTimeout(()=>{if(child===old)old.kill();resolve();},2500);});}
   tray?.destroy();app.quit();
 }
@@ -49,10 +56,14 @@ else {
     session.defaultSession.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
     session.defaultSession.setPermissionCheckHandler(()=>false);
     const icon=nativeImage.createFromPath(path.join(__dirname,'icon.png'));
+    if(process.platform==='darwin'){
+      app.dock?.setIcon(icon);
+      macAudio=require('./mac-audio-controller').createController({BrowserWindow,session,desktopCapturer,ipcMain},message=>child?.postMessage(message));
+    }
     win=new BrowserWindow({width:1560,height:980,minWidth:1080,minHeight:700,show:false,backgroundColor:'#141619',title:'Control Resonant · 直播主题',icon,autoHideMenuBar:true,
       webPreferences:{preload:path.join(__dirname,'preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false,backgroundThrottling:false},
     });
-    Menu.setApplicationMenu(null);
+    Menu.setApplicationMenu(process.platform==='darwin'?Menu.buildFromTemplate([{label:app.name,submenu:[{role:'about'},{type:'separator'},{label:'显示客户端',click:show},{type:'separator'},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]):null);
     win.webContents.setWindowOpenHandler(({url})=>{
       // Local editor preview windows stay inside the app with no preload or Node access.
       try {if(state.base&&new URL(url).origin===new URL(state.base).origin)return {action:'allow',overrideBrowserWindowOptions:{autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,preload:undefined}}};}catch{}
@@ -67,7 +78,9 @@ else {
     win.on('close',event=>{if(!exiting){event.preventDefault();win.hide();}});
     win.once('ready-to-show',show);
     win.webContents.on('render-process-gone',(_event,details)=>{log('Renderer exited '+details.reason);win.reload();});
-    tray=new Tray(icon);tray.setToolTip('Control Resonant · 直播服务运行中');
+    const trayIcon=process.platform==='darwin'?nativeImage.createFromPath(path.join(__dirname,'trayTemplate.png')).resize({width:20,height:20}):icon;
+    if(process.platform==='darwin')trayIcon.setTemplateImage(true);
+    tray=new Tray(trayIcon);tray.setToolTip('Control Resonant · 直播服务运行中');
     tray.setContextMenu(Menu.buildFromTemplate([{label:'打开客户端',click:show},{type:'separator'},{label:'退出并停止本地服务',click:quit}]));tray.on('double-click',show);
     handle('desktop:state',()=>state);
     handle('desktop:open-page',key=>shell.openExternal(pageUrl(state.base,key)));
@@ -85,4 +98,5 @@ else {
   }).catch(error=>{log(error.stack);app.exit(1);});
   app.on('before-quit',event=>{if(!exiting){event.preventDefault();void quit();}});
   app.on('window-all-closed',()=>{});
+  app.on('activate',show);
 }

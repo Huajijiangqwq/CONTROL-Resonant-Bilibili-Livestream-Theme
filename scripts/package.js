@@ -30,6 +30,7 @@ function excluded(rel) {
     /\.(?:exe|log|tmp|zip)$/.test(rel) ||
     /(?:audio|now-playing)-settings\.json$/.test(rel) ||
     /bilibili-(?:open|session)-credentials\.enc(?:\.tmp)?$/.test(rel) ||
+    /(?:^|\/)credential-key\.enc(?:\.tmp)?$/.test(rel) ||
     /(^|\/)\.env(?:\.|$)/.test(rel)
   );
 }
@@ -105,7 +106,7 @@ function build() {
   }
   const manifest = Buffer.from(hashes.join('\n') + '\n');
   entries.push([`${slug}/SHA256SUMS.txt`, manifest]);
-  const dist = path.join(root, 'dist');
+  const dist = path.resolve(process.env.CONTROL_DIST || path.join(root, 'dist'));
   fs.mkdirSync(dist, { recursive: true });
   const archive = makeZip(entries),
     name = slug + '.zip';
@@ -117,7 +118,7 @@ function build() {
   console.log(
     `${name}: ${files.length} files, ${(archive.length / 1048576).toFixed(2)} MiB. Runtime data excluded.`,
   );
-  return { name, files, archive };
+  return { name, files, archive, dir: dist };
 }
 if (require.main === module) build();
 module.exports = { build, excluded, makeZip };

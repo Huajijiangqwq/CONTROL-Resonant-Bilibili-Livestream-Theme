@@ -24,8 +24,9 @@ function createService({
   capturePath = path.join(__dirname, 'now-playing-capture.exe'),
   defaultProvider = 'external',
   mediaProvider = null,
+  spawnCapture = null,
 } = {}) {
-  const builtin = mediaProvider || require('./windows-media').createWindowsMedia();
+  const builtin = mediaProvider || (process.platform === 'darwin' ? require('./mac-media').createMacMedia() : require('./windows-media').createWindowsMedia());
   const setupToken = require('node:crypto').randomBytes(24).toString('hex');
   const defaults = {
     musicProvider: defaultProvider,
@@ -64,6 +65,8 @@ function createService({
     service: 'hiss-now-playing',
     version: 1,
     config,
+    platform: process.platform,
+    builtinLabel: process.platform === 'darwin' ? 'macOS 识别（Music / Spotify）' : 'Windows 内置识别（SMTC）',
     track: EMPTY(),
     musicError: '',
     audio: {
@@ -172,7 +175,7 @@ function createService({
     state.audio.error = '';
     state.audio.running = true;
     const ownGeneration = generation;
-    if (!fs.existsSync(capturePath)) {
+    if (!spawnCapture && !fs.existsSync(capturePath)) {
       state.audio.running = false;
       state.audio.error = '请打开桌面客户端或运行“启动全部服务.cmd”，完成本机音频组件准备。';
       publish();
@@ -209,7 +212,7 @@ function createService({
         publish();
       }
     });
-    const child = (capture = spawn(capturePath, [config.source], {
+    const child = (capture = spawnCapture ? spawnCapture(config.source) : spawn(capturePath, [config.source], {
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     }));
@@ -291,9 +294,9 @@ function createService({
     publish();
   }
   async function refreshSources() {
-    if (!fs.existsSync(capturePath)) return;
+    if (!spawnCapture && !fs.existsSync(capturePath)) return;
     await new Promise((resolve) => {
-      const process = spawn(capturePath, ['list'], {
+      const process = spawnCapture ? spawnCapture('list') : spawn(capturePath, ['list'], {
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });

@@ -25,6 +25,8 @@
 
 ## 外部服务与研究资料
 
+macOS 适配为本项目原创 MIT 代码：通过 Electron / Chromium 的系统音频入口及 Music / Spotify 公开自动化接口读取信息，不是 Widdit 后端的移植。Electron 44.4.3 的官方 Mac 运行环境随客户端分发，保留 Electron LICENSE 与 Chromium 许可清单。图标通过本项目几何绘制代码生成，提供 ICO / ICNS / PNG；不是替换官方游戏 Logo。
+
 [Widdit/now-playing-service](https://github.com/Widdit/now-playing-service) 是独立安装的歌曲信息服务；本包只调用本机接口，不包含它的程序或源码。OBS 通过自写的 websocket v5 桥接，不依赖 `obs-websocket-js`。Windows 音频捕获不依赖 NAudio。
 
 audioMotion-analyzer、CAVA、MilkDrop / Butterchurn 等曾用于研究音频可视化，没有把它们的代码作为本包运行时依赖，不能把研究参考写成已集成的功能。

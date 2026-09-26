@@ -33,12 +33,16 @@ for (const file of [
   ...walk(path.join(root, 'scripts')),
   ...walk(path.join(root, 'tests')),
 ]) {
-  if (!/\.(js|html|css|cs|ps1)$/.test(file)) continue;
+  if (!/\.(js|jxa|html|css|cs|ps1)$/.test(file)) continue;
   const text = fs.readFileSync(file, 'utf8');
   checked++;
   if (file.endsWith('.js')) {
     const r = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
     if (r.status !== 0) errors.push(r.stderr);
+  }
+  if (file.endsWith('.jxa')) {
+    const r=spawnSync(process.execPath,['--check'],{input:text,encoding:'utf8'});
+    if(r.status!==0)errors.push(r.stderr);
   }
   if (file.startsWith(app + path.sep) || file.startsWith(path.join(root, 'desktop') + path.sep)) {
     if (/(?:[A-Z]:[\\/]Users[\\/]|codex-runtimes|CodexData)/i.test(text))

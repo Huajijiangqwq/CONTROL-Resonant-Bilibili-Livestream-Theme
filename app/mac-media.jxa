@@ -1,0 +1,17 @@
+// Read-only public application scripting dictionaries. Never starts a player.
+function run(){
+  var players=[['com.spotify.client','Spotify'],['com.apple.Music','Music']],paused=null,denied=false;
+  for(var entry of players){
+    var app;
+    try{app=Application(entry[0]);if(!app.running())continue;}catch(e){continue;}
+    try{
+      var state=app.playerState();if(state==='stopped')continue;
+      var t=app.currentTrack(),result={connected:true,hasSong:true,paused:state!=='playing',title:t.name(),artist:t.artist(),album:t.album(),position:app.playerPosition(),duration:t.duration()/(entry[1]==='Spotify'?1000:1)};
+      result.id=entry[1]+':'+result.title+':'+result.artist+':'+result.album;
+      if(entry[1]==='Spotify')result.artworkUrl=t.artworkUrl();
+      if(!result.paused)return JSON.stringify(result);
+      paused=result;
+    }catch(e){denied=true;}
+  }
+  return JSON.stringify(paused||{connected:!denied,hasSong:false,paused:true,error:denied?'请在系统设置 → 隐私与安全性 → 自动化中允许读取 Music / Spotify。':'请在 Music 或 Spotify 播放歌曲。'});
+}

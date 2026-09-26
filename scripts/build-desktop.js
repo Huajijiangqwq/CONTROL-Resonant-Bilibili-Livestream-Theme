@@ -24,19 +24,20 @@ async function main(){
   fs.mkdirSync(stage,{recursive:true});
   psFile(path.join(__dirname,'expand-archive.ps1'),['-Archive',archive,'-Destination',stage]);
   const sourceStage=path.join(cache,'source-'+Date.now());
-  psFile(path.join(__dirname,'expand-archive.ps1'),['-Archive',path.join(root,'dist',source.name),'-Destination',sourceStage]);
+  psFile(path.join(__dirname,'expand-archive.ps1'),['-Archive',path.join(source.dir,source.name),'-Destination',sourceStage]);
   fs.cpSync(path.join(sourceStage,`${pkg.name}-${pkg.version}`),payload,{recursive:true});
   // Only the release source manifest plus this precompiled original helper enters the app.
   fs.copyFileSync(path.join(root,'app','now-playing-capture.exe'),path.join(payload,'app','now-playing-capture.exe'));
   fs.renameSync(path.join(stage,'electron.exe'),path.join(stage,'ControlResonant.exe'));
+  psFile(path.join(__dirname,'set-exe-icon.ps1'),['-Executable',path.join(stage,'ControlResonant.exe'),'-Icon',path.join(root,'desktop','icon.ico')]);
   fs.copyFileSync(path.join(root,'README.md'),path.join(stage,'README.md'));
   fs.copyFileSync(path.join(root,'THIRD_PARTY_NOTICES.md'),path.join(stage,'THIRD_PARTY_NOTICES.md'));
   const label=String(process.env.CONTROL_BUILD_LABEL||'').replace(/[^a-z0-9.-]/gi,'').slice(0,64);
   const slug=`ControlResonant-${pkg.version}-win-x64${label?'-'+label:''}`,entries=[],hashes=[];
   function walk(dir){for(const file of fs.readdirSync(dir,{withFileTypes:true})){const full=path.join(dir,file.name);if(file.isDirectory())walk(full);else{const rel=path.relative(stage,full).replaceAll('\\','/'),bytes=fs.readFileSync(full);entries.push([slug+'/'+rel,bytes]);hashes.push(crypto.createHash('sha256').update(bytes).digest('hex')+'  '+rel);}}}
   walk(stage);entries.push([slug+'/SHA256SUMS.txt',Buffer.from(hashes.sort().join('\n')+'\n')]);
-  const target=path.join(root,'dist',slug+'.zip'),bytes=makeZip(entries);fs.writeFileSync(target,bytes);
-  const sum=crypto.createHash('sha256').update(bytes).digest('hex');fs.appendFileSync(path.join(root,'dist','SHA256SUMS.txt'),sum+'  '+path.basename(target)+'\n');
+  const target=path.join(source.dir,slug+'.zip'),bytes=makeZip(entries);fs.writeFileSync(target,bytes);
+  const sum=crypto.createHash('sha256').update(bytes).digest('hex');fs.appendFileSync(path.join(source.dir,'SHA256SUMS.txt'),sum+'  '+path.basename(target)+'\n');
   fs.writeFileSync(path.join(cache,'last-build.json'),JSON.stringify({stage,archive:target,sha256:sum,electronVersion,electronSHA},null,2));
   console.log(JSON.stringify({archive:target,MiB:(bytes.length/1048576).toFixed(2),sha256:sum,stage},null,2));
 }

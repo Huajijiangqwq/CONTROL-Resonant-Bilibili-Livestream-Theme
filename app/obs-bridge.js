@@ -11,7 +11,7 @@ class ObsError extends Error {
   }
 }
 function localConfig() {
-  const base = process.env.APPDATA;
+  const base = process.platform === 'darwin' ? path.join(require('node:os').homedir(), 'Library', 'Application Support') : process.env.APPDATA;
   if (!base) return null;
   try {
     const value = JSON.parse(

@@ -22,11 +22,11 @@ function createSessionStore({ file = defaultFile(), seal = protect, unseal = b =
       const data = JSON.parse(unseal(fs.readFileSync(file)).toString('utf8'));
       saved = { session: sessionValue(data.session), savedAt: Number(data.savedAt) || 0 };
       error = '';
-    } catch { error = '保存的登录信息无法解密，请在当前 Windows 账户下重新扫码。'; }
+    } catch { error = '保存的登录信息无法解密，请在当前系统账户下重新扫码。'; }
   }
   return {
     read() { load(); if (error) throw Error(error); return saved?.session || ''; },
-    info() { load(); return { saved: !!saved, savedAt: saved?.savedAt || null, error, canRemember: process.platform === 'win32' }; },
+    info() { load(); return { saved: !!saved, savedAt: saved?.savedAt || null, error, canRemember: process.platform === 'win32' || (process.platform === 'darwin' && require('./platform-credentials').available()) }; },
     save(value) {
       const checked = { session: sessionValue(value), savedAt: Date.now() };
       const bytes = seal(JSON.stringify(checked));

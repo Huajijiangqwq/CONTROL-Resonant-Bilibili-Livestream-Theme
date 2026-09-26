@@ -1,5 +1,12 @@
 # 版本记录
 
+## Beta 1 桌面更新 — 2026-09-26
+
+- 应用图标改为黑底白色倒三角、希斯红点与细流纹，Windows EXE 文件资源、窗口、托盘和 Mac 应用图标同步更新。
+- 增加 Apple 芯片 arm64 / Intel x64 Mac 试用包、保留 Unix 权限及框架链接的打包脚本、可手动运行的 macOS 构建工作流。
+- Mac 适配 Music / Spotify 元数据、系统音频入口、钥匙串保护的登录保存、菜单栏和 OBS 配置路径；暂不支持按应用采集及 Music 封面，官方 Now Playing 自动安装仅保留在 Windows。
+- Mac 包尚未实机验证，未做 Developer ID 签名与 Apple 公证，具体使用方式和限制见 docs/macOS.md。
+
 ## 0.1.0-beta.1 — 2026-09-24
 
 首次公开测试版。测试阶段，欢迎反馈 bug 和建议。

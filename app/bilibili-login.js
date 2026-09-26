@@ -11,7 +11,7 @@
           <button type="button" id="liveQrCancel">取消扫码</button>
         </div>
         <label class="check"><input type="checkbox" id="liveGuest"> 本次使用访客模式</label>
-        <p class="hint">扫码确认后自动获取 SESSDATA，并在当前 Windows 账户下加密保存。重启无需重新填写；登录过期时再扫码。</p>`;
+        <p class="hint">扫码确认后自动获取 SESSDATA，并通过当前系统账户加密保存（Windows / macOS 客户端）。重启无需重新填写；登录过期时再扫码。</p>`;
       const $ = id => root.querySelector('#' + id);
       let token = '', id = '', timer, revision = 0, busy = false, disposed = false;
       function saved(info) {

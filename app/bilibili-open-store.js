@@ -5,6 +5,7 @@ const { config } = require('./bilibili-open-protocol');
 // Windows DPAPI: credentials are bound to this Windows account. No bundled key.
 // Input travels over stdin, never a process argument, command substitution or log.
 function protect(text, decrypt = false) {
+  if (process.platform === 'darwin') return require('./platform-credentials').protect(text, decrypt);
   if (process.platform !== 'win32') throw Error('本机加密保存目前需要 Windows；可取消记住配置，仅本次连接。');
   const method = decrypt ? 'Unprotect' : 'Protect';
   const script = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; ` +
@@ -31,7 +32,7 @@ function createStore({ file, seal = protect, unseal = bytes => protect(bytes, tr
     read: () => saved ? { ...saved } : {},
     info: () => ({ saved: !!saved, appId: saved?.appId || '', hasCode: !!saved?.code,
       hasKeys: !!saved?.accessKeySecret, autoConnect: !!saved?.autoConnect,
-      canRemember: process.platform === 'win32', error }),
+      canRemember: process.platform === 'win32' || (process.platform === 'darwin' && require('./platform-credentials').available()), error }),
     save(value) {
       const checked = config(value, false), bytes = seal(JSON.stringify(checked));
       fs.mkdirSync(path.dirname(file), { recursive: true });

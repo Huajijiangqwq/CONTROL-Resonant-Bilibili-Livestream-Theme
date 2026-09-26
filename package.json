@@ -16,6 +16,7 @@
     "package": "node scripts/package.js",
     "start:server": "node scripts/serve.js",
     "build:desktop": "node scripts/build-desktop.js",
+    "build:mac": "node scripts/build-mac.js",
     "build:audio": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/compile-audio.ps1"
   },
   "main": "desktop/main.js",
