@@ -1,0 +1,7 @@
+/* Music-specific arrangement; the common studio stylesheet owns all colours. */
+.music-section-heading { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 12px; }
+.music-section-heading h2 { margin: 0; }
+.music-section-heading button { width: auto; flex: none; padding-inline: 10px; }
+#recordingControls label { margin-block: 18px; }
+#recordingControls output { font-variant-numeric: tabular-nums; }
+.music-section-heading + .hint { margin-top: 0; }

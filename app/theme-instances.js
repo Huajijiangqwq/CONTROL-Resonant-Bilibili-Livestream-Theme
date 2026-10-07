@@ -3,8 +3,8 @@
   'use strict';
   const kinds = ['normal', 'sc', 'gift', 'fleet'];
   const firstChat = (doc) =>
-    doc.layers.find((l) => l.id === 'chat' && l.type === 'chat') ||
-    doc.layers.find((l) => l.type === 'chat');
+    doc.layers.find((l) => l.id === 'chat' && l.type === 'chat' && !l.standalone) ||
+    doc.layers.find((l) => l.type === 'chat' && !l.standalone);
   function owner(doc, l) {
     if (l.type === 'chat') return l;
     if (l.standalone) return null;
@@ -51,6 +51,7 @@
       const g = doc.layers.find((x) => x.id === l.parent);
       return {
         ...l,
+        ...(target?.type === 'chat' && l.id === target.id ? { standalone: false } : {}),
         parent: '',
         visible: l.visible && g?.visible !== false,
         opacity: l.opacity * (g?.opacity ?? 1),
@@ -96,17 +97,17 @@
     }
     for (const l of chosen.values()) mapping.set(l.id, id());
     const visible = [...chosen.values()].filter(
-        (l) =>
-          l.type !== 'resonance' && !(kinds.includes(l.type) && mapping.has(owner(doc, l)?.id)),
+        (l) => !(kinds.includes(l.type) && mapping.has(owner(doc, l)?.id)),
       ),
       delta = {};
-    for (const [axis, size, limit] of [
-      ['x', 'w', 1920],
-      ['y', 'h', 1080],
+    for (const [axis, limit] of [
+      ['x', 7680],
+      ['y', 4320],
     ]) {
-      const low = -Math.min(0, ...visible.map((l) => l[axis])),
-        high = limit - Math.max(0, ...visible.map((l) => l[axis] + l[size]));
-      delta[axis] = Math.max(low, Math.min(high, offset));
+      const low = -limit - Math.min(0, ...visible.map((l) => l[axis])),
+        high = limit - Math.max(0, ...visible.map((l) => l[axis]));
+      delta[axis] = offset >= low && offset <= high ? offset
+        : -offset >= low && -offset <= high ? -offset : Math.max(low, Math.min(high, offset));
     }
     for (const l of chosen.values()) {
       const c = structuredClone(l);
@@ -152,7 +153,7 @@
     }
     return { items, selection: source.map((l) => mapping.get(l.id)) };
   }
-  const api = { kinds, owner, feed, project, targets, matches, clone };
+  const api = { kinds, primaryChat: firstChat, owner, feed, project, targets, matches, clone };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.ThemeInstances = api;
 })(globalThis);

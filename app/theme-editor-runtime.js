@@ -3,16 +3,16 @@
   'use strict';
   const p = new URLSearchParams(location.search),
     hash = new URLSearchParams(location.hash.slice(1));
-  if (!p.has('editor') && !hash.has('theme') && !p.has('theme')) return;
+  const isolatedPreview = p.has('libraryPreview');
+  if (!p.has('editor') && !hash.has('theme') && !p.has('theme') && !p.has('published')) return;
   const M = ThemeEditorModel,
     scene = document.getElementById('scene'),
     $ = (id) => document.getElementById(id),
     nodes = new Map(),
     flowFields = new Map();
   let project = null,
-    lastCustom = '',
-    lastTimer = '',
-    lastBands = '';
+    lastCustom = null,
+    lastTimer = '';
   const native = {
     chat: scene.querySelector('.chat-panel'),
     game: $('gameWindow'),
@@ -88,7 +88,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     el.style.zIndex = 10 + index;
     el.style.mixBlendMode = l.blend;
     el.style.transform = `rotate(${l.rotation}deg)`;
-    el.style.filter = `brightness(${l.brightness})${l.shadow ? ' drop-shadow(0 2px ' + l.shadow + 'px #000b)' : ''}`;
+    el.style.filter = ThemeLayerEffects.filter(l, el.ownerDocument);
     if (geometry)
       Object.assign(el.style, {
         left: l.x + 'px',
@@ -100,7 +100,19 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
       });
     el.dataset.themeLayer = l.id;
   }
+  const mediaDocuments = new WeakMap();
+  function cropMedia(el, l) {
+    if (!ThemeMediaCrop.enabled(l)) return;
+    const sw = el.naturalWidth || el.videoWidth, sh = el.naturalHeight || el.videoHeight,
+      box = ThemeMediaCrop.style(sw, sh, l.w, l.h, l.fit, l), crop = ThemeMediaCrop.normalize(l);
+    Object.assign(el.style, { position: 'absolute', right: 'auto', bottom: 'auto', maxWidth: 'none', maxHeight: 'none',
+      left: box ? box.left + 'px' : '0', top: box ? box.top + 'px' : '0',
+      width: box ? box.width + 'px' : '100%', height: box ? box.height + 'px' : '100%',
+      objectFit: box ? 'fill' : l.fit,
+      clipPath: `inset(${crop.cropTop}% ${crop.cropRight}% ${crop.cropBottom}% ${crop.cropLeft}%)` });
+  }
   function media(el, l) {
+    mediaDocuments.set(el, l);
     el.crossOrigin = 'anonymous';
     el.onerror = () => {
       if (!el.getAttribute('src')) return;
@@ -114,21 +126,28 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
           location.origin,
         );
     };
-    el.onload = el.onloadeddata = () => delete el.dataset.mediaError;
+    el.onload = el.onloadeddata = () => { delete el.dataset.mediaError; cropMedia(el, mediaDocuments.get(el)); };
     if (el.getAttribute('src') !== l.src) {
       delete el.dataset.mediaError;
       if (l.src) el.setAttribute('src', l.src);
       else el.removeAttribute('src');
     }
     el.style.objectFit = l.fit;
+    cropMedia(el, l);
     if (el.tagName === 'VIDEO') {
       el.muted = true;
       el.loop = l.loop;
-      el.autoplay = true;
+      el.autoplay = !isolatedPreview;
       el.playsInline = true;
       el.playbackRate = l.speed;
-      if (l.visible && l.src && !paused) el.play().catch(() => {});
+      if (l.visible && l.src && !paused && !isolatedPreview) el.play().catch(() => {});
       else el.pause();
+    }
+  }
+  function releaseMedia(el) {
+    for (const video of el.tagName === 'VIDEO' ? [el] : el.querySelectorAll('video')) {
+      video.pause(); video.removeAttribute('src'); video.load();
+      mediaDocuments.delete(video);
     }
   }
   const templates = Object.fromEntries(
@@ -207,10 +226,9 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     project = window.ThemeOutput ? ThemeOutput.apply(value) : M.normalize(value);
     scene.dataset.editorTheme = 'true';
     scene.dataset.composition = project.composition;
-    const custom = M.custom(ThemeInstances.project(project)),
-      signature = JSON.stringify(custom);
-    if (signature !== lastCustom) {
-      lastCustom = signature;
+    const custom = M.custom(ThemeInstances.project(project));
+    if (!ThemeDocumentCompare.same(custom, lastCustom)) {
+      lastCustom = custom;
       window.CustomLayout.setValue(custom);
       LiveLayout.change('custom', false, false);
       LiveLayoutConfig.setCustom(custom);
@@ -223,6 +241,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
       if (l.type === 'group') continue;
       let el = nodes.get(l.id);
       if (el && el.dataset.themeType !== l.type) {
+        releaseMedia(el);
         if (Object.values(native).includes(el)) el.classList.add('theme-hidden');
         else el.remove();
         nodes.delete(l.id);
@@ -240,11 +259,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
           document.createElement(
             ['normal', 'gift', 'sc', 'fleet', 'resonance', 'border'].includes(l.type)
               ? 'canvas'
-              : l.type === 'image'
-                ? 'img'
-                : l.type === 'video'
-                  ? 'video'
-                  : 'div',
+              : 'div',
           );
         if (!native[l.type] && !['host', 'topic', 'status'].includes(l.type)) {
           el.className = 'theme-layer';
@@ -264,9 +279,11 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
       }
       if (l.type === 'background') {
         const mode = l.mode;
+        el.style.overflow = 'hidden';
         let surface = el.firstElementChild;
         if (mode === 'theme') {
           if (surface?.tagName.toLowerCase() !== 'svg') {
+            releaseMedia(el);
             surface = nativeBackground.cloneNode(true);
             el.replaceChildren(surface);
           }
@@ -274,12 +291,14 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
           el.style.background = 'none';
         } else if (mode === 'image' || mode === 'video') {
           if (surface?.tagName.toLowerCase() !== (mode === 'image' ? 'img' : 'video')) {
+            releaseMedia(el);
             surface = document.createElement(mode === 'image' ? 'img' : 'video');
             el.replaceChildren(surface);
           }
           media(surface, l);
           el.style.background = 'none';
         } else {
+          releaseMedia(el);
           el.replaceChildren();
           el.style.background = mode === 'transparent' ? 'transparent' : l.fill;
         }
@@ -352,7 +371,12 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
           color: l.color,
           overflow: 'hidden',
         });
-      } else if (['image', 'video'].includes(l.type)) media(el, l);
+      } else if (['image', 'video'].includes(l.type)) {
+        el.style.overflow = 'hidden';
+        let content = el.firstElementChild;
+        if (!content) { content = document.createElement(l.type === 'image' ? 'img' : 'video'); content.dataset.cropMedia = ''; el.append(content); }
+        media(content, l);
+      }
       else if (['shape', 'line'].includes(l.type))
         Object.assign(el.style, {
           background: l.type === 'border' ? 'transparent' : l.fill,
@@ -362,6 +386,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     }
     for (const [id, el] of nodes) {
       if (!alive.has(id)) {
+        releaseMedia(el);
         if (flowFields.has(id)) {
           flowFields.get(id).effect?.dispose();
           flowFields.delete(id);
@@ -373,8 +398,8 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     }
     for (const [type, el] of Object.entries(native))
       if (!project.layers.some((l) => l.type === type)) el.classList.add('theme-hidden');
-    for (const [id, value] of Object.entries(project.settings)) {
-      if (['nowPlayingEnabled', 'resonanceStrength'].includes(id)) continue;
+    for (const [id, value] of LiveState.documentSettings(project.settings)) {
+      if (['nowPlayingEnabled', 'resonanceStrength', 'timerOffset', 'timerElapsed', 'timerStarted'].includes(id)) continue;
       const el = $(id);
       if (!el || !['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) || el.type === 'file')
         continue;
@@ -397,13 +422,6 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
         startedAt:
           project.settings.timerStarted === 'paused' ? null : Number(project.settings.timerStarted),
       });
-    }
-    const bands = JSON.stringify(
-      Object.entries(project.settings).filter(([key]) => key.startsWith('band')),
-    );
-    if (project.settings.audioApply && bands !== lastBands) {
-      lastBands = bands;
-      $('bandApply').click();
     }
     const music = project.layers.find((x) => x.type === 'music');
     if (music) {
@@ -431,7 +449,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
       }
     }
     const combined = project.composition === 'feed',
-      chat = project.layers.find((l) => l.type === 'chat');
+      chat = ThemeInstances.primaryChat(project);
     for (const l of project.layers) {
       const el = nodes.get(l.id);
       if (el)
@@ -510,6 +528,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     }
     return true;
   }
+  const decorationSurfaces = new WeakMap();
   function paintChatDecorations(c, viewDoc = ThemeInstances.project(project)) {
     if (!viewDoc || viewDoc.composition !== 'feed') return false;
     const chat = viewDoc.layers.find((l) => l.type === 'chat');
@@ -529,11 +548,24 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
       c.translate(l.x - chat.x, l.y - chat.y);
       c.globalAlpha = l.opacity;
       c.globalCompositeOperation = l.blend === 'normal' ? 'source-over' : l.blend;
-      c.filter = `brightness(${l.brightness})${l.shadow ? ' drop-shadow(0 2px ' + l.shadow + 'px #000b)' : ''}`;
+      c.filter = ThemeLayerEffects.filter(l, c.canvas.ownerDocument);
       if (l.rotation) {
         c.translate(l.w / 2, l.h / 2);
         c.rotate((l.rotation * Math.PI) / 180);
         c.translate(-l.w / 2, -l.h / 2);
+      }
+      const output = c;
+      let surface = null;
+      if (l.effectsEnabled !== false && (l.effects || []).some(effect => effect.enabled !== false && ['stroke','outerGlow','innerGlow','colorOverlay'].includes(effect.type))) {
+        surface = decorationSurfaces.get(el);
+        if (!surface) { surface = output.canvas.ownerDocument.createElement('canvas'); decorationSurfaces.set(el, surface); }
+        const width = Math.max(1, Math.ceil(l.w)), height = Math.max(1, Math.ceil(l.h));
+        if (surface.width !== width) surface.width = width;
+        if (surface.height !== height) surface.height = height;
+        c = surface.getContext('2d');
+        c.save(); c.clearRect(0, 0, width, height);
+        // First compose the full unfiltered layer, then apply the same filter as
+        // its DOM element. This also keeps text clipping ahead of its glow.
       }
       if (l.type === 'text') {
         c.font = `${l.weight} ${l.size}px ${M.fonts[l.font]}`;
@@ -564,6 +596,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
         lines.forEach((line, i) => c.fillText(line, x, baseline + i * step));
       } else ThemeDecorationPaint.draw(c, el, l);
       c.restore();
+      if (surface) { c = output; ThemeLayerEffects.drawCanvas(c, surface, l); c.restore(); }
     }
     return true;
   }
@@ -588,7 +621,7 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
   function configureChatSignal() {
     const plate =
         window.FleetMainInterlude?.primaryCanvas || scene.querySelector('.fleet-interlude'),
-      chat = project?.layers.find((l) => l.type === 'chat');
+      chat = project && ThemeInstances.primaryChat(project);
     if (!plate || !chat) return;
     scene.append(plate);
     Object.assign(plate.style, {
@@ -657,7 +690,16 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     },
     paintChatDecorations,
     preview(command, data) {
-      if (p.has('editor')) instances.preview(command, data);
+      if (p.has('editor')) {
+        if (['editor-send', 'editor-demo', 'editor-preview', 'editor-seek'].includes(command))
+          window.ThemeLiveBridge?.beginLocalPreview(command === 'editor-preview' || command === 'editor-seek' ? 'timeline' : 'example');
+        else if (command === 'pause' && data === true)
+          window.ThemeLiveBridge?.beginLocalPreview('timeline', { clear: false });
+        instances.preview(command, data);
+      }
+    },
+    remotePreview(command, data) {
+      if (['editor-send', 'editor-demo', 'clear'].includes(command)) instances.preview(command, data);
     },
     previewState() {
       return instances.records();
@@ -685,10 +727,10 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
         const l = project?.layers.find((x) => x.id === id);
         if (!l) continue;
         const video =
-          el.tagName === 'VIDEO' ? el : l.type === 'background' ? el.querySelector('video') : null;
+          el.tagName === 'VIDEO' ? el : ['video', 'background'].includes(l.type) ? el.querySelector('video') : null;
         if (video) {
           if (paused || !M.effective(project, l).visible || !l.src) video.pause();
-          else video.play().catch(() => {});
+          else if (!isolatedPreview) video.play().catch(() => {});
         }
       }
     },

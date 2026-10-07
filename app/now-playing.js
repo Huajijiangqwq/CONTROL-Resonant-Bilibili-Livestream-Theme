@@ -3,33 +3,56 @@
   const $ = (id) => document.getElementById(id),
     base = window.ThemeServices?.music || 'http://127.0.0.1:8795',
     params = new URLSearchParams(location.search),
+    development = window.ThemeDevelopment === true,
     renderer = new NowPlayingSignal.Renderer($('musicCanvas')),
     envelope = new NowPlayingDSP.SpectrumEnvelope(),
     fineEnvelope = new NowPlayingFineDSP.SpectrumEnvelope(),
     demoEnvelope = new NowPlayingFineDSP.SpectrumEnvelope();
   // The selected 46 renderer is used unchanged by the standalone and embedded skin.
+  const MusicSettings = window.NowPlayingSettings;
   const signalKey = 'hiss-now-playing-signal-test-34';
-  let signalConfig = NowPlayingSignal.settings({
-    strength: 1.05,
-    softness: 1.5,
-    bleed: 4.5,
-    offset: 1.8,
-    motion: 1,
-    hue: 1,
-    noise: 1,
-    frequency: 1,
-  });
-  try {
-    const saved = JSON.parse(localStorage.getItem(signalKey) || 'null');
-    if (saved) signalConfig = NowPlayingSignal.settings(saved);
-  } catch {}
-  window.addEventListener('storage', (event) => {
-    if (event.key === signalKey) {
-      try {
-        signalConfig = NowPlayingSignal.settings(JSON.parse(event.newValue || '{}'));
-      } catch {}
+  let signalConfig = MusicSettings.normalizeSignal(), legacySignalChecked = false;
+  let pendingSettings = {}, pendingSignal = {}, commandQueue = Promise.resolve();
+  const recordingControls = new Map();
+  for (const [key, field] of Object.entries(MusicSettings.signal)) {
+    const label = document.createElement('label'), output = document.createElement('output'), input = document.createElement('input');
+    input.type = 'range'; input.id = 'signal-' + key; input.min = field.min; input.max = field.max; input.step = field.step;
+    output.id = 'signal-' + key + '-value'; output.htmlFor = input.id; label.htmlFor = input.id;
+    label.append(document.createTextNode(field.label), output, input);
+    $('recordingControls').append(label); recordingControls.set(key, { input, output });
+    input.addEventListener('input', () => {
+      const value = Number(input.value);
+      pendingSignal[key] = value; signalConfig[key] = value; updateRecordingControls(); scheduleCustomization();
+    });
+  }
+  function updateRecordingControls() {
+    for (const [key, { input, output }] of recordingControls) {
+      if (document.activeElement !== input) input.value = signalConfig[key];
+      output.textContent = MusicSettings.formatSignal(key, signalConfig[key]);
     }
-  });
+  }
+  function scheduleCustomization() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const payload = { ...pendingSettings };
+      if (Object.keys(pendingSignal).length) payload.signal = { ...pendingSignal };
+      if (Object.keys(payload).length) command(payload);
+    }, 180);
+  }
+  function clearAcknowledged(payload) {
+    for (const [key, value] of Object.entries(payload)) if (key !== 'signal' && pendingSettings[key] === value) delete pendingSettings[key];
+    for (const [key, value] of Object.entries(payload.signal || {})) if (pendingSignal[key] === value) delete pendingSignal[key];
+  }
+  function migrateLegacySignal(config) {
+    if (legacySignalChecked || params.has('obs') || params.has('embedded')) return;
+    legacySignalChecked = true;
+    if (config.signalConfigured) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(signalKey) || 'null');
+      const patch = MusicSettings.signalPatch(saved);
+      if (Object.keys(patch).length) command({ command: 'migrate-signal', signal: patch });
+    } catch {}
+  }
   let demoStarted = performance.now();
   // A deterministic synthetic signal: no recorded music or user audio is shipped.
   function recordedLevels(now) {
@@ -82,7 +105,7 @@
       stamp: Date.now(),
     },
     audio = {},
-    demo = params.has('demo'),
+    demo = development && params.has('demo'),
     connected = false,
     lastFrame = NaN,
     nextFrame = NaN,
@@ -90,6 +113,8 @@
     lastFps = performance.now(),
     lastUi = 0,
     saveTimer = null;
+  document.querySelector('.mode-buttons').hidden = !development;
+  $('performanceLabel').hidden = !development;
   const demoTrack = {
     hasSong: true,
     paused: false,
@@ -110,7 +135,9 @@
     $('status').dataset.error = String(error);
   }
   function applySettings(next) {
-    settings = { ...settings, ...next };
+    settings = { ...settings, ...next, ...pendingSettings };
+    signalConfig = MusicSettings.normalizeSignal({ ...settings.signal, ...pendingSignal });
+    updateRecordingControls();
     if (hostFps !== null) settings.fps = hostFps;
     envelope.configure(settings);
     fineEnvelope.configure(settings);
@@ -187,7 +214,12 @@
             ? '已暂停'
             : '正在播放';
   }
-  async function command(payload) {
+  function command(payload) {
+    const operation = commandQueue.then(() => sendCommand(payload));
+    commandQueue = operation.catch(() => false);
+    return operation;
+  }
+  async function sendCommand(payload) {
     try {
       const response = await fetch(base + '/control', {
         method: 'POST',
@@ -197,6 +229,7 @@
       });
       const result = await response.json();
       if (!response.ok) throw Error(result.error || '操作失败');
+      clearAcknowledged(payload);
       applyState(result);
       status('设置已更新，OBS 纯画面同步生效。');
       return true;
@@ -217,6 +250,7 @@
       const setup=$('setupNowPlaying');if(setup){const box=setup.closest('.upstream-setup');const credit=box.querySelector('a[href="https://github.com/Widdit"]')?.closest('p');if(credit)box.before(credit);setup.hidden=true;box.hidden=true;}
     }
     applySettings(state.config);
+    migrateLegacySignal(state.config);
     track = state.track;
     audio = state.audio || {};
     if (!demo && audio.db) feedAudio(audio, performance.now());
@@ -266,6 +300,7 @@
     );
   };
   $('demoMode').onclick = () => {
+    if (!development) return;
     demo = true;
     applyMode();
   };
@@ -281,21 +316,18 @@
   $('musicProvider').onchange = () => command({ musicProvider: $('musicProvider').value });
   for (const key of ['gain', 'attack', 'release', 'tilt', 'texture', 'flow'])
     $(key).oninput = () => {
-      settings[key] = Number($(key).value);
+      pendingSettings[key] = settings[key] = Number($(key).value);
       envelope.configure(settings);
       fineEnvelope.configure(settings);
       labels();
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(
-        () =>
-          command(
-            Object.fromEntries(
-              ['gain', 'attack', 'release', 'tilt', 'texture', 'flow'].map((k) => [k, settings[k]]),
-            ),
-          ),
-        180,
-      );
+      scheduleCustomization();
     };
+  $('resetRecording').onclick = () => {
+    pendingSignal = { ...MusicSettings.signalDefaults };
+    signalConfig = { ...pendingSignal };
+    updateRecordingControls();
+    scheduleCustomization();
+  };
   $('saveRange').onclick = () =>
     command({ floor: Number($('floor').value), ceiling: Number($('ceiling').value) });
   $('fpsMode').onchange = () => {
@@ -304,7 +336,7 @@
   };
   $('customFps').onchange = () => command({ fps: Number($('customFps').value) });
   $('copyObs').onclick = async () => {
-    const url = new URL('now-playing.html?obs=1&v=production46-1', location.href).href;
+    const url = new URL('now-playing.html?obs=1', location.href).href;
     try {
       await navigator.clipboard.writeText(url);
       status('已复制 OBS 地址。浏览器源尺寸：1920 × 560。');

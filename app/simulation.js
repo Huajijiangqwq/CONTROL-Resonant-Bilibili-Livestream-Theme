@@ -172,6 +172,7 @@
   }
   function scPaintVersion(m) {
     return [
+      window.NativeNoticeMotion?.scActive(motionAge(m), exitTime(m), m.scLayout?.maxDelay || 0) ? Math.floor(Math.max(0, clock - m.born) / 16) : 0,
       window.ThemePartMedia?.revision || 0,
       window.ThemeTypography?.revision || 0,
       m.page,
@@ -959,6 +960,12 @@
     const body = m.bodySize ?? layout.fontSize,
       sx = r.x + 18,
       innerW = r.w - 36;
+    function nativeInk(kind, paint) {
+      const accent = window.NativeNoticeMotion?.scPart(kind, motionAge(m), exitTime(m), m.tier, NativeNoticeMotion.reduced);
+      c.save();
+      if (accent) { c.translate(accent.x, accent.y); c.globalAlpha *= accent.alpha; }
+      paint(); c.restore();
+    }
     c.textBaseline = 'top';
     c.textAlign = 'left';
     c.fillStyle = '#141614';
@@ -968,6 +975,7 @@
     panel.addColorStop(1, '#0000000a');
     c.fillStyle = panel;
     c.fillRect(r.x, r.y, r.w, r.h);
+    nativeInk('label', () => {
     triangle(c, sx, r.y + 25, '#ee4d41', embedded ? 8 : 5);
     write(
       c,
@@ -979,6 +987,7 @@
       '#f05245',
       embedded ? 600 : 500,
     );
+    });
     if (m.reading.pages.length > 1) {
       const page =
           String(m.page + 1).padStart(2, '0') +
@@ -996,7 +1005,7 @@
         500,
       );
     }
-    m.senderLines
+    nativeInk('name', () => m.senderLines
       .slice(0, compact() ? 2 : 3)
       .forEach((s, i) =>
         write(
@@ -1010,11 +1019,11 @@
           '#eff0e7',
           embedded ? 600 : 500,
         ),
-      );
+      ));
     const amount = '¥ ' + (m.amount ?? tiers[m.tier].amount),
       amountSize = m.tier >= 5 ? body + 2 : body + 4;
     font(c, amountSize, 600);
-    write(
+    nativeInk('amount', () => write(
       c,
       amount,
       compact() ? sx : r.x + r.w - 18 - c.measureText(amount).width,
@@ -1022,14 +1031,14 @@
       amountSize,
       '#f3f1e8',
       600,
-    );
-    m.reading.pages[m.page].forEach((s, i) =>
+    ));
+    nativeInk('body', () => m.reading.pages[m.page].forEach((s, i) =>
       write(c, s, sx, r.y + m.bodyY + i * (m.lineH + 1), body + 1, '#f0f0e6', embedded ? 600 : 400),
-    );
+    ));
     const py = r.y + r.h - 27,
       trackW = innerW - 77;
     rule(c, sx, py, sx + trackW, '#30372f', 2);
-    write(c, timeLabel(remaining), sx + trackW + 17, py - 7, 13, '#ef5145', 500);
+    nativeInk('timer', () => write(c, timeLabel(remaining), sx + trackW + 17, py - 7, 13, '#ef5145', 500));
   }
   function updateComposer() {
     const sc = draftKind === 'sc',
@@ -1348,7 +1357,7 @@
       timerStarted: clock - restoredAge,
       layer: null,
     };
-    NoticeLifetime.start(m, clock, seed ? 0 : entryDuration(m), noticeSettings);
+    NoticeLifetime.start(m, clock, data.restored ? entryDuration(m) : seed ? 0 : entryDuration(m), noticeSettings, restoredAge);
     measure(m);
     messages.push(m);
     sent++;
@@ -2055,6 +2064,12 @@
     if (canvas.getAttribute('aria-label') !== label) canvas.setAttribute('aria-label', label);
   }
   function resize() {
+    const setSize = (width, height) => {
+      // Assigning either canvas dimension resets pixels and drawing state,
+      // even if the value did not change. Presentation updates are frequent.
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+    };
     if (combinedChat() && !activeZone) {
       const chat = component('chat');
       if (!chat) {
@@ -2066,16 +2081,14 @@
       viewTop = 20;
       viewBottom = viewHeight - 12;
       viewClipLeft = viewClipRight = 56;
-      canvas.width = Math.round((chat.w + 112) * layout.quality);
-      canvas.height = Math.round(viewHeight * layout.quality);
+      setSize(Math.round((chat.w + 112) * layout.quality), Math.round(viewHeight * layout.quality));
       $('canvasShell').style.width = chat.w + 112 + 'px';
       $('canvasShell').style.height = viewHeight + 'px';
       needsDraw = true;
       return;
     }
     if (split() && !activeZone) {
-      canvas.width = 1920;
-      canvas.height = 1080;
+      setSize(1920, 1080);
       $('canvasShell').style.width = $('stage').clientWidth + 'px';
       $('canvasShell').style.height = $('stage').clientHeight + 'px';
       needsDraw = true;
@@ -2095,15 +2108,13 @@
           : 0;
       viewHeight = Math.max(320, (el.clientHeight / Math.max(1, el.clientWidth)) * W);
       viewBottom = viewHeight - 12;
-      canvas.width = Math.round(W * q);
-      canvas.height = Math.round(viewHeight * q);
+      setSize(Math.round(W * q), Math.round(viewHeight * q));
       $('canvasShell').style.width = el.clientWidth + 'px';
       $('canvasShell').style.height = el.clientHeight + 'px';
       needsDraw = true;
       return;
     }
-    canvas.width = Math.round(W * q);
-    canvas.height = Math.round(viewHeight * q);
+    setSize(Math.round(W * q), Math.round(viewHeight * q));
     const stage = $('stage'),
       zoom = Math.max(
         0.12,
@@ -2652,10 +2663,10 @@
           body: TextLimit.take(data?.body || '欢迎来到太古屋', 1600),
           rank: FleetNotice.names[data?.rank] ? data.rank : 'captain',
           tier: Math.round(clamp(data?.tier, 0, 6, 3)),
-          duration: 180,
-          giftName: TextLimit.take(data?.body || '能量电池', 60),
-          quantity: 10,
-          value: 1000,
+          duration: clamp(data?.duration, 1, 7200, 180),
+          giftName: TextLimit.take(data?.giftName || data?.body || '能量电池', 60),
+          quantity: Math.round(clamp(data?.quantity, 1, 999999, 10)),
+          value: clamp(data?.value, 0, 999999999, 1000),
         };
       m.fx = preset(m.tier);
       if (kind === 'fleet') m.body = '开通' + FleetNotice.names[m.rank];
@@ -2695,11 +2706,12 @@
       // Authoring previews are local to this editor canvas, even when the
       // published theme uses a live source. Do not change the live connection.
       const authoring = editorDoc() && new URLSearchParams(parent.location.search).has('editor');
-      if (command === 'editor-demo' && authoring) {
+      const syncedOutput = !!parent.EditorMessageSync;
+      if (command === 'editor-demo' && (authoring || syncedOutput)) {
         mainDemo(true, true);
         return;
       }
-      if (command === 'editor-send' && authoring) {
+      if (command === 'editor-send' && (authoring || syncedOutput)) {
         auto = false;
         paused = false;
         lastEditorPreview = structuredClone(data || {});

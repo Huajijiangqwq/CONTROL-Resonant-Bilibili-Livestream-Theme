@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawnSync}=require('node:child_process');
-const {build,makeZip}=require('./package');
+const {build,makeZip,runtimeEntries,refreshArchiveChecksums}=require('./package');
 const root=path.resolve(__dirname,'..'),pkg=require('../package.json');
 const electronVersion='44.4.3';
 const electronSHA='790a355b684d5c7cc8dc3cdd8c4cca7c4b2d054685427c7554a956879a82e70b';
@@ -23,10 +23,11 @@ async function main(){
   const stage=path.join(cache,'stage-'+Date.now()),payload=path.join(stage,'resources','app');
   fs.mkdirSync(stage,{recursive:true});
   psFile(path.join(__dirname,'expand-archive.ps1'),['-Archive',archive,'-Destination',stage]);
-  const sourceStage=path.join(cache,'source-'+Date.now());
-  psFile(path.join(__dirname,'expand-archive.ps1'),['-Archive',path.join(source.dir,source.name),'-Destination',sourceStage]);
-  fs.cpSync(path.join(sourceStage,`${pkg.name}-${pkg.version}`),payload,{recursive:true});
-  // Only the release source manifest plus this precompiled original helper enters the app.
+  for(const [relative,bytes] of runtimeEntries(source.files)){
+    const target=path.join(payload,relative);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,bytes);
+  }
+  // The public runtime omits development pages and tests; the separate source
+  // archive retains them for contributors. This is our precompiled audio helper.
   fs.copyFileSync(path.join(root,'app','now-playing-capture.exe'),path.join(payload,'app','now-playing-capture.exe'));
   fs.renameSync(path.join(stage,'electron.exe'),path.join(stage,'ControlResonant.exe'));
   psFile(path.join(__dirname,'set-exe-icon.ps1'),['-Executable',path.join(stage,'ControlResonant.exe'),'-Icon',path.join(root,'desktop','icon.ico')]);
@@ -37,7 +38,7 @@ async function main(){
   function walk(dir){for(const file of fs.readdirSync(dir,{withFileTypes:true})){const full=path.join(dir,file.name);if(file.isDirectory())walk(full);else{const rel=path.relative(stage,full).replaceAll('\\','/'),bytes=fs.readFileSync(full);entries.push([slug+'/'+rel,bytes]);hashes.push(crypto.createHash('sha256').update(bytes).digest('hex')+'  '+rel);}}}
   walk(stage);entries.push([slug+'/SHA256SUMS.txt',Buffer.from(hashes.sort().join('\n')+'\n')]);
   const target=path.join(source.dir,slug+'.zip'),bytes=makeZip(entries);fs.writeFileSync(target,bytes);
-  const sum=crypto.createHash('sha256').update(bytes).digest('hex');fs.appendFileSync(path.join(source.dir,'SHA256SUMS.txt'),sum+'  '+path.basename(target)+'\n');
+  const sum=crypto.createHash('sha256').update(bytes).digest('hex');refreshArchiveChecksums(source.dir);
   fs.writeFileSync(path.join(cache,'last-build.json'),JSON.stringify({stage,archive:target,sha256:sum,electronVersion,electronSHA},null,2));
   console.log(JSON.stringify({archive:target,MiB:(bytes.length/1048576).toFixed(2),sha256:sum,stage},null,2));
 }

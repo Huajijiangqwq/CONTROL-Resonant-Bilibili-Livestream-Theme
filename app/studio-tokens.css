@@ -1,0 +1,11 @@
+/* Application controls share these values. Broadcast artwork owns its own colors. */
+:root{
+ --ui-font:'Segoe UI','Microsoft YaHei',sans-serif;
+ --ui-bg:#171b21;--ui-panel:#21262e;--ui-panel-soft:#1d232b;--ui-field:#191e25;
+ --ui-control:#2b3440;--ui-hover:#354251;--ui-selected:#384858;--ui-line:#3b4450;
+ --ui-text:#e8edf2;--ui-muted:#abb8c6;--ui-dim:#8191a3;--ui-accent:#c8756a;--ui-focus:#a6c7e8;
+ --ui-primary:#e1e8ee;--ui-primary-text:#1a2631;--ui-success:#afc7b9;--ui-danger:#efaaa1;--ui-warning:#e6bd86;
+ --ui-header-height:56px;--ui-control-height:32px;--ui-panel-width:320px;--ui-radius:4px;
+ --ui-text-size:12px;--ui-small-size:11px;--ui-title-size:15px;--ui-section-size:12px;--ui-space:16px;
+}
+@media(max-width:900px){:root{--ui-panel-width:280px;--ui-space:12px}}

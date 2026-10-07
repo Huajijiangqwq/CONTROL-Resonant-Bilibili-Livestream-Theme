@@ -29,20 +29,23 @@
   }
   async function draft(key) {
     const value = await operation('readonly', key);
-    return value?.format === 'control-editor-draft' ? value : null;
+    if (value?.format !== 'control-editor-draft') return null;
+    const safety = await operation('readonly', key + '-live-safety');
+    return { ...value, safety: Math.max(value.safety || 0, safety?.generation || 0) };
   }
-  function commitDraft(key, document, revision, writer) {
+  function commitDraft(key, document, revision, writer, epoch = null) {
     return opened.then(
       (db) =>
         new Promise((resolve, reject) => {
           const tx = db.transaction('documents', 'readwrite'),
             store = tx.objectStore('documents'),
-            request = store.get(key);
-          let result;
-          request.onsuccess = () => {
+            request = store.get(key), safetyRequest = store.get(key + '-live-safety');
+          let result, documentReady = false, safetyReady = false;
+          const commit = () => {
+            if (!documentReady || !safetyReady) return;
             const current =
               request.result?.format === 'control-editor-draft' ? request.result : null;
-            if ((current?.revision || 0) !== revision) {
+            if ((current?.revision || 0) !== revision || (epoch && current?.epoch && current.epoch !== epoch)) {
               result = { ok: false, current };
               return;
             }
@@ -50,12 +53,16 @@
               format: 'control-editor-draft',
               revision: revision + 1,
               writer,
+              epoch: current?.epoch || crypto.randomUUID(),
+              safety: safetyRequest.result?.generation || 0,
               updatedAt: Date.now(),
               document,
             };
             store.put(next, key);
             result = { ok: true, current: next };
           };
+          request.onsuccess = () => { documentReady = true; commit(); };
+          safetyRequest.onsuccess = () => { safetyReady = true; commit(); };
           tx.oncomplete = () => resolve(result);
           tx.onerror = () => reject(tx.error);
           tx.onabort = () => reject(tx.error || new Error('草稿保存已取消'));
@@ -111,6 +118,10 @@
     update,
     draft,
     commitDraft,
+    bumpSafety: key => update(key + '-live-safety', current => {
+      const generation = (Number(current?.generation) || 0) + 1;
+      return { value: { generation }, result: generation };
+    }),
     entries,
   };
 })();

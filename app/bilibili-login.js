@@ -3,9 +3,9 @@
   window.BilibiliLogin = {
     mount(root, { base, onChange = () => {} }) {
       root.innerHTML = `
-        <div class="button-row tools"><button type="button" id="liveQrStart">扫码登录</button><button type="button" id="liveQrForget">清除已保存登录</button></div>
+        <div class="button-row tools"><button type="button" id="liveQrStart">扫码登录</button><button type="button" id="liveQrForget" disabled>清除已保存登录</button></div>
         <p class="hint" id="liveLoginSaved" role="status">正在读取本机登录状态…</p>
-        <div id="liveQrPanel" hidden style="margin:12px 0;padding:16px;border:1px solid #5a5148;background:#171a17">
+        <div id="liveQrPanel" hidden style="margin:12px 0;padding:16px;border:1px solid var(--ui-line,#5a5148);border-radius:var(--ui-radius,4px);background:var(--ui-field,#171a17)">
           <img id="liveQrImage" alt="哔哩哔哩登录二维码" width="216" height="216" hidden style="display:block;width:216px;height:216px;max-width:100%;background:white;padding:8px;box-sizing:border-box">
           <p id="liveQrStatus" class="hint" role="status"></p>
           <button type="button" id="liveQrCancel">取消扫码</button>
@@ -14,6 +14,11 @@
         <p class="hint">扫码确认后自动获取 SESSDATA，并通过当前系统账户加密保存（Windows / macOS 客户端）。重启无需重新填写；登录过期时再扫码。</p>`;
       const $ = id => root.querySelector('#' + id);
       let token = '', id = '', timer, revision = 0, busy = false, disposed = false;
+      function errorText(error) {
+        if (error?.name === 'TypeError') return '本地接入服务未连接，请启动或重启客户端。';
+        if (['AbortError', 'TimeoutError'].includes(error?.name)) return '连接本地接入服务超时，请稍后重试。';
+        return error?.message || '登录操作未完成，请重试。';
+      }
       function saved(info) {
         if (!info) return;
         $('liveLoginSaved').textContent = info.error || (info.saved ? '已保存登录。填写房间号后直接连接；留空 SESSDATA 会使用保存的登录。' : '尚未保存登录，可扫码一次后自动记住。');
@@ -55,7 +60,7 @@
             return;
           }
           timer = setTimeout(() => poll(run), 1800);
-        } catch (e) { if (revision === run) { $('liveQrStatus').textContent = e.message; $('liveQrImage').hidden = true; } }
+        } catch (e) { if (revision === run) { $('liveQrStatus').textContent = errorText(e); $('liveQrImage').hidden = true; } }
       }
       $('liveQrStart').onclick = async () => {
         if (busy) return;
@@ -71,7 +76,7 @@
           id = data.qr.id; $('liveQrImage').src = data.qr.image; $('liveQrImage').hidden = false;
           $('liveQrStatus').textContent = data.qr.message;
           timer = setTimeout(() => poll(run), 1800);
-        } catch (e) { if (revision === run) $('liveQrStatus').textContent = e.message; }
+        } catch (e) { if (revision === run) $('liveQrStatus').textContent = errorText(e); }
         finally { busy = false; $('liveQrStart').disabled = false; }
       };
       function close() {
@@ -84,13 +89,13 @@
       $('liveQrForget').onclick = async () => {
         close(); busy = true; $('liveQrForget').disabled = true;
         try { await health(); await action('forget'); }
-        catch (e) { $('liveLoginSaved').textContent = e.message; }
+        catch (e) { $('liveLoginSaved').textContent = errorText(e); }
         finally { busy = false; await health().catch(() => {}); }
       };
       window.addEventListener('pagehide', () => { disposed = true; revision++; clearTimeout(timer); clearInterval(refresh); });
       window.addEventListener('pageshow', () => { disposed = false; });
       const refresh = setInterval(() => { if (!disposed && !busy) health().catch(() => {}); }, 15000);
-      health().catch(e => { $('liveLoginSaved').textContent = e.message; });
+      health().catch(e => { $('liveLoginSaved').textContent = errorText(e); });
       return { apply: saved };
     },
   };

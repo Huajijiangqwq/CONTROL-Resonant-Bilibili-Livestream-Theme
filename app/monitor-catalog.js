@@ -1,5 +1,5 @@
 /* Recording workbench. Its settings never write to the live theme document. */
-(() => {
+(function(root) {
   'use strict';
   const number = (key,label,min,max,step=1) => ({key,label,type:'number',min,max,step});
   const text = (key,label) => ({key,label,type:'text'});
@@ -29,16 +29,26 @@
   const tiers={2:[24,44,28,48,24,9,28],30:[32,54,33,56,28,13,30],50:[39,62,37,60,32,17,33],100:[46,68,40,62,34,20,36],500:[60,85,43,72,43,29,39],1000:[74,106,46,83,52,39,42],2000:[88,126,48,92,62,49,45]};
   const shared=[number('x','中心 X / px',-1920,3840),number('y','中心 Y / px',-1080,2160),number('width','组件宽度 / px',100,3000),select('background','录制背景',[['transparent','透明'],['black','纯黑'],['green','绿幕'],['game','游戏示例']]),select('fps','帧率上限',[[60,'60 FPS'],[30,'30 FPS'],[24,'24 FPS']]),number('lead','开场留空 / 秒',0,30,.1),number('entry','入场时长 / 秒',.05,20,.05),number('hold','停留时长 / 秒',.1,600,.1),number('exit','退场时长 / 秒',.1,10,.1),{key:'autoExit',label:'到时退场',type:'checkbox'},{key:'loop',label:'循环播放',type:'checkbox'},select('speed','播放速度',[[1,'1×'],[.5,'0.5×'],[.25,'0.25×'],[2,'2×']])];
   function clean(id,raw={}) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) raw = {};
     const item=entries.find(e=>e.id===id)||entries[0],out={...item.defaults};
     for(const f of [...shared,...item.fields]){
       if(!(f.key in raw))continue;const v=raw[f.key];
-      if(f.type==='number'&&Number.isFinite(Number(v)))out[f.key]=Math.min(f.max,Math.max(f.min,Number(v)));
+      if(f.type==='number' && ['string','number'].includes(typeof v) && String(v).trim() && Number.isFinite(Number(v)))out[f.key]=Math.min(f.max,Math.max(f.min,Number(v)));
       else if(f.type==='checkbox')out[f.key]=v===true;
-      else if(f.type==='text')out[f.key]=String(v).slice(0,300);
+      else if(f.type==='text' && ['string','number'].includes(typeof v))out[f.key]=String(v).slice(0,300);
       else if(f.type==='select'){const found=f.options.find(([key])=>String(key)===String(v));if(found)out[f.key]=found[0];}
     }
     return out;
   }
   function total(s){return s.lead+s.entry+s.hold+(s.autoExit?s.exit+1:0);}
-  window.MonitorCatalog={entries,shared,tiers,clean,total};
-})();
+  const validController = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{16,100}$/.test(value);
+  function acceptsControl({ controller, view, id, linked }, message, direct = false) {
+    if (!message || message.channel !== 'control-monitor-command' || message.id !== id) return false;
+    if (direct && !controller) return !message.controller;
+    if (!validController(controller) || message.controller !== controller) return false;
+    return direct ? message.view === view : !!linked;
+  }
+  const api={entries,shared,tiers,clean,total,validController,acceptsControl};
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.MonitorCatalog=api;
+})(typeof window === 'object' ? window : {});

@@ -1,6 +1,7 @@
 /* One local meter is shared by the editor and OBS. It sends numbers only. */
 (() => {
   'use strict';
+  if (new URLSearchParams(location.search).has('libraryPreview')) return;
   const base = window.ThemeServices?.audio || 'http://127.0.0.1:8794',
     envelope = AudioEnvelope.create(),
     $ = (id) => document.getElementById(id);

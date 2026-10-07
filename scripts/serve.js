@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '..');
 const appRoot = path.join(root, 'app');
 const version = require('../package.json').version;
 const args = process.argv.slice(2);
+if (args.includes('--dev')) process.env.CONTROL_DEV = '1';
 const portIndex = args.indexOf('--port');
 const port = Number(portIndex >= 0 ? args[portIndex + 1] : process.env.THEME_PORT || 8791);
 const previewOnly = args.includes('--preview-only');

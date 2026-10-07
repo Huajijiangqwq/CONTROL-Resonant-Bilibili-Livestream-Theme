@@ -25,10 +25,30 @@ def check_name(name):
     if p.is_absolute() or '..' in p.parts or '\\' in name or ':' in name:
         raise ValueError('Unsafe archive path: ' + name)
 
+def refresh_archive_checksums(directory):
+    # Match package.js: current top-level regular ZIP files, sorted by filename.
+    # Never preserve hashes from an earlier manifest after an archive is replaced.
+    directory = Path(directory)
+    archives = sorted((item for item in directory.iterdir()
+        if item.is_file() and not item.is_symlink() and item.suffix.lower() == '.zip'),
+        key=lambda item: item.name)
+    lines = []
+    for archive in archives:
+        digest = hashlib.sha256()
+        with archive.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(chunk)
+        lines.append(digest.hexdigest() + '  ' + archive.name)
+    with (directory / 'SHA256SUMS.txt').open('w', encoding='utf-8', newline='\n') as manifest:
+        manifest.write('\n'.join(lines) + ('\n' if lines else ''))
+
 def main():
     parser=argparse.ArgumentParser()
     for key in ('runtime','source','arch','cache','output'): parser.add_argument('--'+key,required=True)
+    parser.add_argument('--prepare-on-mac', action='store_true')
     args=parser.parse_args()
+    if sys.platform != 'darwin' and not args.prepare_on_mac:
+        raise RuntimeError('Build on macOS, or explicitly request a local-preparation kit.')
     pkg=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))
     entries={}
     with zipfile.ZipFile(args.runtime) as runtime:
@@ -44,7 +64,7 @@ def main():
     info_name=APP+'Contents/Info.plist'
     info=plistlib.loads(entries[info_name][0])
     info.update(CFBundleName='Control Resonant',CFBundleDisplayName='Control Resonant',
-        CFBundleIdentifier='com.huajijiang.controlresonant',CFBundleShortVersionString='0.1.0',CFBundleVersion='1',
+        CFBundleIdentifier='com.huajijiang.controlresonant',CFBundleShortVersionString=pkg['version'].split('-')[0],CFBundleVersion=pkg['version'].split('-')[0],
         CFBundleIconFile='icon.icns',LSMinimumSystemVersion='14.2',
         LSApplicationCategoryType='public.app-category.video',
         NSAudioCaptureUsageDescription='允许 Control Resonant 读取系统音频，用于实时音乐频谱和希斯共振效果。',
@@ -74,9 +94,12 @@ def main():
                 if replaced not in entries and replaced+'/' not in entries:
                     raise ValueError('Unresolved framework link: '+name)
     entries['README-macOS.md']=((ROOT/'docs/macOS.md').read_bytes(),stat.S_IFREG|0o644)
+    entries['prepare-mac.sh']=((ROOT/'scripts/prepare-mac.sh').read_bytes().replace(b'\r\n',b'\n'),stat.S_IFREG|0o755)
+    entries['修复并打开.command']=((ROOT/'scripts/repair-mac.command').read_bytes().replace(b'\r\n',b'\n'),stat.S_IFREG|0o755)
     native=sys.platform=='darwin'
     metadata={'version':pkg['version'],'arch':args.arch,'minimumMacOS':'14.2','electron':pkg['devDependencies']['electron'],
-        'buildHost':sys.platform,'bundleSignature':'ad-hoc' if native else 'unsigned',
+        'buildHost':sys.platform,'bundleSignature':'ad-hoc' if native else 'requires-local-signing',
+        'requiresLocalPreparation':not native,
         'notarized':False,'macOSRuntimeTested':False,'upstreamMachOUnmodified':not native}
     if native:
         # Use a unique temporary staging directory. Do not mutate a user's installed app.
@@ -92,7 +115,7 @@ def main():
                     target.write_bytes(data);target.chmod(mode & 0o777)
             for target,link in links: target.parent.mkdir(parents=True,exist_ok=True);target.symlink_to(link)
             bundle=folder/APP
-            subprocess.run(['/usr/bin/codesign','--force','--deep','--sign','-', '--entitlements',str(ROOT/'desktop/mac-entitlements.plist'),str(bundle)],check=True)
+            subprocess.run(['/bin/bash',str(ROOT/'scripts/prepare-mac.sh'),str(bundle)],check=True)
             subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict','--verbose=2',str(bundle)],check=True)
             for current,dirs,files in os.walk(bundle,followlinks=False):
                 for filename in dirs+files:
@@ -100,11 +123,11 @@ def main():
                     if target.is_symlink(): entries[name]=(os.readlink(target).encode(),mode)
                     elif target.is_file(): entries[name]=(target.read_bytes(),mode)
     entries['BUILD-INFO.json']=(json.dumps(metadata,ensure_ascii=False,indent=2).encode(),stat.S_IFREG|0o644)
-    slug=f"ControlResonant-{pkg['version']}-mac-{args.arch}"
+    slug=f"ControlResonant-{pkg['version']}-mac-{args.arch}" + ('' if native else '-setup')
     target=Path(args.output)/(slug+'.zip')
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
         for name,(data,mode) in sorted(entries.items()):
-            item=zipfile.ZipInfo(slug+'/'+name,date_time=(2026,9,26,0,0,0))
+            item=zipfile.ZipInfo(slug+'/'+name,date_time=(2026,9,27,0,0,0))
             item.create_system=3;item.external_attr=mode<<16
             if stat.S_ISDIR(mode): item.external_attr|=0x10
             item.compress_type=zipfile.ZIP_DEFLATED
@@ -112,6 +135,7 @@ def main():
     with zipfile.ZipFile(target) as archive:
         if archive.testzip(): raise ValueError('ZIP verification failed')
     sha=hashlib.sha256(target.read_bytes()).hexdigest()
+    refresh_archive_checksums(args.output)
     (Path(args.cache)/('last-mac-'+args.arch+'.json')).write_text(json.dumps({'archive':str(target),'sha256':sha,**metadata},indent=2),encoding='utf-8')
     print(json.dumps({'archive':str(target),'MiB':round(target.stat().st_size/1048576,2),'sha256':sha,**metadata},indent=2))
 

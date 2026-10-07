@@ -1,0 +1,20 @@
+/* Control layout only; pure output and embedded message surfaces are excluded. */
+html[data-studio=simulation]:not(.embedded) body:not(.pure) aside[aria-label]{padding-top:0;background:#242c36;border-color:#3c4855}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-tabs{margin-inline:-20px;padding-inline:12px;background:#242c36;top:0;z-index:5}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-tabs button{font-size:12px;white-space:nowrap}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel>.block{padding-top:14px;padding-bottom:18px;margin-bottom:0;border-color:#3b4754}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel .section-title{margin-bottom:11px}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel .section-title small{display:none}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel .field{margin-top:13px}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel :is(input,select,textarea){background:#19222b;border-color:#43515f;color:#e4ebef}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel :is(button,a.link){background:#2d3945;border-color:#475766;color:#e6edf2}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel .primary{background:#e1e8ea;color:#18242e;border-color:#e1e8ea}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel .hint{color:#a3b2c0;line-height:1.75}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel .message-status{background:#202b35;padding:8px 10px;border-radius:4px}
+.simulation-source-note{display:flex;align-items:center;gap:10px;font-size:11px;line-height:1.6;color:#b1c1ce;padding:10px 11px;background:#202a34;border:1px solid #3f5263;border-radius:4px;margin:10px 0}
+.simulation-source-note span{flex:1}.simulation-source-note button{flex:none;min-height:29px;font-size:11px;padding:5px 7px}.simulation-source-note[data-live=true]{flex-wrap:wrap;border-color:#957a59;background:#39342c;color:#e6d8bd}
+.simulation-source-note[data-live=true] span{flex-basis:100%}.simulation-shared-setting{padding-left:9px;border-left:2px solid #647c91}
+.simulation-reference-links{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}.simulation-reference-links a.link{font-size:11px;text-align:center;line-height:1.7;padding:9px 6px}
+html[data-studio=simulation]:not(.embedded) body:not(.pure) header .actions{flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:850px){html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-tabs{margin-inline:-15px;padding-inline:10px}}
+@media(max-width:620px){html[data-studio=simulation]:not(.embedded) body:not(.pure) aside[aria-label]{padding:0 16px 16px}html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-tabs{margin-inline:-16px;padding-inline:12px}html[data-studio=simulation]:not(.embedded) body:not(.pure) .simulation-control-panel>.block{max-width:none}}

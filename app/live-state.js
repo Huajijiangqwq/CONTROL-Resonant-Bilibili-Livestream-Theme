@@ -5,6 +5,14 @@
   const clean = (value, fallback, max) =>
     typeof value === 'string' ? textLimit.take(value.replace(/[\r\n\t]/g, ' '), max) : fallback;
   const safeTime = (value) => (Number.isFinite(value) && value >= 0 ? value : 0);
+  function storesPreset(params, hash = new URLSearchParams()) {
+    return !['obs', 'editor', 'theme', 'published', 'libraryPreview'].some(key => params.has(key)) && !hash.has('theme');
+  }
+  function documentSettings(settings) {
+    // Sound capture, source selection, and the shared clock are runtime controls.
+    // A render or imported draft must never replay those controls as user actions.
+    return Object.entries(settings || {}).filter(([key]) => !/^(audio|band\d+-|live[A-Z]|timer)/.test(key) && key !== 'messageSource');
+  }
   function normalize(value = {}, now = Date.now()) {
     return {
       host: clean(value.host, '调查员 07', 30),
@@ -66,7 +74,7 @@
       result.startedAt = params.get('start') === 'paused' ? null : Number(params.get('start'));
     return normalize(result, now);
   }
-  const api = { normalize, elapsed, toggle, reset, format, parseDuration, query, fromQuery };
+  const api = { normalize, elapsed, toggle, reset, format, parseDuration, query, fromQuery, storesPreset, documentSettings };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.LiveState = api;
 })(typeof window === 'object' ? window : globalThis);

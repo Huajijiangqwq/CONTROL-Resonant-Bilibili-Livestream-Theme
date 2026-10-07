@@ -15,6 +15,8 @@
     typeof module === 'object' && module.exports
       ? require('./theme-keyframes.js')
       : root.ThemeKeyframes;
+  const F = typeof module === 'object' && module.exports ? require('./theme-layer-effects.js') : root.ThemeLayerEffects;
+  const Crop = typeof module === 'object' && module.exports ? require('./theme-media-crop.js') : root.ThemeMediaCrop;
   const builtin = [
     'chat',
     'background',
@@ -70,7 +72,9 @@
   // Embedded sources are immutable strings. Validate identical material once,
   // with a bounded LRU so discarded imports cannot retain unbounded memory.
   const sourceMemo = new Map(),
-    sourceMemoLimit = 16 * 1024 * 1024;
+    // Named documents accept up to 40 MiB. Keep one usable document's validated
+    // media hot while dragging; a 16 MiB cache repeatedly rescanned two images.
+    sourceMemoLimit = 48 * 1024 * 1024;
   let sourceMemoCharacters = 0,
     sourceMemoHits = 0,
     sourceMemoChecks = 0;
@@ -78,7 +82,7 @@
     if (s.length < 4096) return;
     sourceMemo.set(s, true);
     sourceMemoCharacters += s.length;
-    while (sourceMemo.size > 64 || sourceMemoCharacters > sourceMemoLimit) {
+    while (sourceMemo.size > 256 || sourceMemoCharacters > sourceMemoLimit) {
       const oldest = sourceMemo.keys().next().value;
       sourceMemoCharacters -= oldest.length;
       sourceMemo.delete(oldest);
@@ -217,8 +221,8 @@
         visible: item.visible !== false,
         locked: item.locked === true,
         placement: item.placement === 'free' ? 'free' : 'flow',
-        x: num(item.x, -600, 1920, 0),
-        y: num(item.y, -600, 1080, 0),
+        x: num(item.x, -7680, 7680, 0),
+        y: num(item.y, -4320, 4320, 0),
         w: num(item.w, 0, 1920, 0),
         h: num(
           item.h,
@@ -343,8 +347,17 @@
     return l.variants?.[key] ? { ...l, ...l.variants[key] } : l;
   }
   function positionRange(l, axis) {
-    const length = axis === 'x' ? 1920 : 1080;
-    return l.type === 'resonance' ? [-length, length] : [0, length - l[axis === 'x' ? 'w' : 'h']];
+    // The broadcast rectangle clips output; it must not clamp editable content.
+    // A bounded pasteboard also permits off-screen entry and exit trajectories.
+    const length = (axis === 'x' ? 1920 : 1080) * 4;
+    return [-length, length];
+  }
+  const supportsAspect = type => ['image', 'video', 'background', 'shape', 'border'].includes(type);
+  function resizeAspect(l, axis, value) {
+    const ratio = num(l.aspectRatio, .01, 100, l.w / Math.max(2, l.h)),
+      minimum = Math.max(2, 2 * ratio), maximum = Math.min(1920, 1080 * ratio),
+      w = num(axis === 'h' ? Number(value) * ratio : value, minimum, maximum, l.w);
+    return { w, h: w / ratio, aspectRatio: ratio };
   }
   function splitHiss(doc, l) {
     const game = doc.layers.find(
@@ -396,7 +409,11 @@
       w = Math.min(w, 1920);
       h = type === 'game' ? (w * 9) / 16 : (w * 7) / 24;
     }
+    const aspectLocked = supportsAspect(type) && raw.aspectLocked === true,
+      aspectRatio = aspectLocked ? num(raw.aspectRatio, .01, 100, w / h) : w / h;
+    if (aspectLocked) ({ w, h } = resizeAspect({ w, h, aspectRatio }, 'w', w));
     return {
+      ...(supportsAspect(type) ? { aspectLocked, aspectRatio } : {}),
       chatId: typeof raw.chatId === 'string' ? raw.chatId.slice(0, 71) : '',
       standalone: raw.standalone === true,
       messageFilter: (type === 'fleet'
@@ -449,8 +466,11 @@
       align: ['left', 'center', 'right'].includes(raw.align) ? raw.align : 'left',
       src: source(raw.src),
       fit: ['cover', 'contain', 'fill'].includes(raw.fit) ? raw.fit : 'contain',
+      ...Crop.normalize(raw),
       shadow: num(raw.shadow, 0, 40, 0),
       brightness: num(raw.brightness, 0.2, 2, 1),
+      effectsEnabled: raw.effectsEnabled !== false,
+      effects: F ? F.normalize(raw.effects) : [],
       mode: ['theme', 'color', 'image', 'video', 'transparent'].includes(raw.mode)
         ? raw.mode
         : 'theme',
@@ -581,7 +601,7 @@
     return {
       format: 'control-theme',
       version: 1,
-      editorVersion: 156,
+      editorVersion: 200,
       composition: raw.composition === 'feed' ? 'feed' : 'layers',
       name: String(raw.name || '我的控制主题').slice(0, 80),
       width: 1920,
@@ -866,6 +886,75 @@
       h: Math.max(...layers.map((l) => l.y + l.h)) - y,
     };
   }
+  function stackGroup(layers, memberIds, group) {
+    const ids = memberIds instanceof Set ? memberIds : new Set(memberIds),
+      members = layers.filter(l => ids.has(l.id)),
+      top = Math.max(-1, ...layers.map((l, i) => ids.has(l.id) ? i : -1)),
+      remainder = layers.filter(l => !ids.has(l.id) && l.id !== group.id &&
+        (l.type !== 'group' || layers.some(child => child.parent === l.id))),
+      kept = new Set(remainder.map(l => l.id)),
+      at = layers.slice(0, top + 1).filter(l => kept.has(l.id)).length;
+    return [...remainder.slice(0, at), ...members, group, ...remainder.slice(at)];
+  }
+  function matchingLayers(layers, query) {
+    const text = String(query || '').trim().toLocaleLowerCase();
+    if (!text) return new Set(layers.map(l => l.id));
+    const direct = layers.filter(l => String(l.name).toLocaleLowerCase().includes(text) ||
+      l.parts?.some(p => String(p.name).toLocaleLowerCase().includes(text))),
+      visible = new Set(direct.map(l => l.id));
+    for (const l of direct) {
+      if (l.parent) visible.add(l.parent);
+      if (l.type === 'group') layers.filter(child => child.parent === l.id).forEach(child => visible.add(child.id));
+    }
+    return visible;
+  }
+  function layerStacks(layers) {
+    return layers.filter(l => !l.parent).map(root => ({ root,
+      children: root.type === 'group' ? layers.filter(l => l.parent === root.id) : [] }));
+  }
+  const flattenStacks = stacks => stacks.flatMap(unit => [...unit.children, unit.root]);
+  function orderLayers(layers, selectedIds, direction) {
+    const requested = selectedIds instanceof Set ? selectedIds : new Set(selectedIds),
+      selected = new Set(layers.filter(l => requested.has(l.id) && !effective({ layers }, l).locked).map(l => l.id)),
+      stacks = layerStacks(layers);
+    if (!selected.size) return layers;
+    const shift = (items, id) => {
+      if (direction > 0)
+        for (let i = items.length - 2; i >= 0; i--) {
+          if (selected.has(id(items[i])) && !selected.has(id(items[i + 1])))
+            [items[i], items[i + 1]] = [items[i + 1], items[i]];
+        }
+      else for (let i = 1; i < items.length; i++)
+        if (selected.has(id(items[i])) && !selected.has(id(items[i - 1])))
+          [items[i], items[i - 1]] = [items[i - 1], items[i]];
+    };
+    shift(stacks, item => item.root.id);
+    for (const unit of stacks) if (!selected.has(unit.root.id)) shift(unit.children, item => item.id);
+    return flattenStacks(stacks);
+  }
+  function dropLayer(layers, sourceId, targetId) {
+    const source = layers.find(l => l.id === sourceId), target = layers.find(l => l.id === targetId);
+    if (!source || !target || source === target || source.id === target.parent) return layers;
+    if (effective({ layers }, source).locked) return layers;
+    const targetGroup = target.type === 'group' ? target : layers.find(l => l.id === target.parent);
+    if (targetGroup && effective({ layers }, targetGroup).locked) return layers;
+    const stacks = layerStacks(layers), sourceStack = stacks.find(u => u.root.id === (source.parent || source.id)),
+      targetStack = stacks.find(u => u.root.id === (target.parent || target.id));
+    if (!sourceStack || !targetStack) return layers;
+    if (source.type === 'group') {
+      stacks.splice(stacks.indexOf(sourceStack), 1);
+      stacks.splice(stacks.indexOf(targetStack) + 1, 0, sourceStack);
+    } else {
+      if (source.parent) sourceStack.children = sourceStack.children.filter(l => l.id !== source.id);
+      else stacks.splice(stacks.indexOf(sourceStack), 1);
+      const parent = target.type === 'group' ? target.id : target.parent || '', copy = { ...source, parent };
+      if (parent) {
+        const at = target.type === 'group' ? targetStack.children.length : targetStack.children.findIndex(l => l.id === target.id) + 1;
+        targetStack.children.splice(at, 0, copy);
+      } else stacks.splice(stacks.indexOf(targetStack) + 1, 0, { root: copy, children: [] });
+    }
+    return flattenStacks(stacks);
+  }
   function custom(doc) {
     const elements = {};
     for (const type of [
@@ -918,6 +1007,8 @@
     limits,
     capacityIssue,
     positionRange,
+    supportsAspect,
+    resizeAspect,
     splitHiss,
     detachHeader,
     get sourceCacheStats() {
@@ -948,6 +1039,10 @@
     create,
     effective,
     bounds,
+    stackGroup,
+    matchingLayers,
+    orderLayers,
+    dropLayer,
     custom,
     layer,
   };

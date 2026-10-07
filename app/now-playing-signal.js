@@ -102,7 +102,7 @@ void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(
 precision highp float;
 in vec2 uv;out vec4 color;
 uniform sampler2D source;uniform sampler2D lettering;uniform sampler2D paperSurface;uniform vec2 size;
-uniform float amount,softness,bleed,offset,motion,hue,noise,time;
+uniform float amount,softness,bleed,offset,motion,hue,noise,time,paperAmount;
 uniform vec2 rolls;uniform vec4 burst;
 float hash(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
 float field(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1)),f.x),f.y);}
@@ -175,7 +175,7 @@ void main(){
   const encode =
     common +
     `
-vec3 currentFrame(vec2 p){vec4 surface=texture(paperSurface,at(p));return mix(texture(source,at(p)).rgb,surface.rgb,surface.a*min(amount,1.0));}
+vec3 currentFrame(vec2 p){vec4 surface=texture(paperSurface,at(p));return mix(texture(source,at(p)).rgb,surface.rgb,clamp(surface.a*min(amount,1.0)*paperAmount,0.0,1.0));}
 void main(){
  vec2 px=1.0/size;vec3 center=yiq(currentFrame(uv));
  float soft=softness*amount;float y=center.x*.26;
@@ -448,6 +448,7 @@ void main(){
           'paperSurface',
           'size',
           'amount',
+          'paperAmount',
           'softness',
           'bleed',
           'offset',
@@ -503,7 +504,7 @@ void main(){
       gl.disable(gl.DEPTH_TEST);
       gl.viewport(0, 0, W, H);
     }
-    draw(sourceCanvas, ms, config = {}, forcedAt = -Infinity, lettering = null) {
+    draw(sourceCanvas, ms, config = {}, forcedAt = -Infinity, lettering = null, paperAmount = 1) {
       if (this.lost) return false;
       const gl = this.gl,
         s = (this.config = settings(config)),
@@ -552,6 +553,7 @@ void main(){
         for (const key of ['softness', 'bleed', 'offset', 'motion', 'hue', 'noise'])
           gl.uniform1f(u[key], s[key]);
         gl.uniform1f(u.amount, s.strength);
+        gl.uniform1f(u.paperAmount, Number.isFinite(paperAmount) ? clamp(paperAmount, 0, 1 / .65) : 1);
         gl.uniform1f(u.time, event.time);
         gl.uniform2f(u.rolls, event.rollA, event.rollB);
         gl.uniform4f(u.burst, event.event, event.y, event.width, event.sign);
@@ -709,7 +711,11 @@ void main(){
     draw(now, levels, config, position, signal, forcedAt) {
       this.base.hiss.time = now / 1000;
       this.base.draw(now, levels, config, position);
-      return this.effect.draw(this.source, now, signal, forcedAt, this.base.typeLayer);
+      // 0.65 is the original production setting. Keep that appearance while
+      // allowing the existing print control to reach the live recording pass.
+      const texture = Number(config.texture ?? .65);
+      return this.effect.draw(this.source, now, signal, forcedAt, this.base.typeLayer,
+        Number.isFinite(texture) ? clamp(texture, 0, 1) / .65 : 1);
     }
     replay(now) {
       this.base.replay(now);

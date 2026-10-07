@@ -10,3 +10,5 @@
 *.jpg binary
 *.webp binary
 *.zip binary
+*.sh text eol=lf
+*.command text eol=lf

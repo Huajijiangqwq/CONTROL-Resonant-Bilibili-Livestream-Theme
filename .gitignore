@@ -4,6 +4,8 @@ dist/
 app/theme-projects/
 app/theme-live/
 app/audio-settings.json
+app/timer-state.json
+app/editor-message-state.json
 app/now-playing-settings.json
 app/now-playing-capture.exe
 *.log

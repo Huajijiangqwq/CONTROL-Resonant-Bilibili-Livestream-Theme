@@ -7,6 +7,7 @@ const fs = require('node:fs'),
   zlib = require('node:zlib');
 const root = path.resolve(__dirname, '..'),
   pkg = require('../package.json');
+const profile = require('../app/release-profile');
 const roots = ['app', 'desktop', 'scripts', 'tests', 'docs', 'licenses', '.github'];
 const rootFiles = [
   'package.json',
@@ -26,9 +27,11 @@ const rootFiles = [
 ];
 function excluded(rel) {
   return (
-    /(^|\/)(?:theme-live|theme-projects|node_modules|external-now-playing|\.runtime)(\/|$)/.test(rel) ||
-    /\.(?:exe|log|tmp|zip)$/.test(rel) ||
+    /(^|\/)(?:theme-live|theme-projects|node_modules|external-now-playing|\.runtime|__pycache__)(\/|$)/.test(rel) ||
+    /\.(?:exe|log|tmp|zip|pyc)$/.test(rel) ||
     /(?:audio|now-playing)-settings\.json$/.test(rel) ||
+    /(?:^|\/)timer-state\.json(?:\.tmp)?$/.test(rel) ||
+    /(?:^|\/)editor-message-state\.json(?:\.tmp)?$/.test(rel) ||
     /bilibili-(?:open|session)-credentials\.enc(?:\.tmp)?$/.test(rel) ||
     /(?:^|\/)credential-key\.enc(?:\.tmp)?$/.test(rel) ||
     /(^|\/)\.env(?:\.|$)/.test(rel)
@@ -41,6 +44,26 @@ function collect(dir) {
     if (e.isSymbolicLink()) throw Error('Symlink not allowed in release: ' + rel);
     return e.isDirectory() ? collect(rel) : [rel];
   });
+}
+function sourceFiles() { return [...rootFiles, ...roots.flatMap(collect)].sort(); }
+function runtimeExcluded(rel) {
+  return /^(?:tests|scripts|\.github)\//.test(rel) ||
+    /^docs\/Beta1发布核对\.md$/.test(rel) ||
+    /^(?:\.git|\.prettier|启动全部服务\.cmd|停止全部服务\.cmd|扫码登录哔哩哔哩\.cmd)/.test(rel) ||
+    (rel.startsWith('app/') && profile.developmentAsset(rel.slice(4)));
+}
+function runtimeEntries(files = sourceFiles()) {
+  const entries = files.filter(file => !runtimeExcluded(file)).map(file => {
+    let data = fs.readFileSync(path.join(root, file));
+    if (file.endsWith('.html')) data = Buffer.from(profile.publicHtml(data.toString('utf8')));
+    return [file, data];
+  });
+  entries.push(['PUBLIC-RELEASE.json', Buffer.from(JSON.stringify({
+    format: 'control-public-runtime', version: pkg.version, developmentTools: false,
+  }, null, 2) + '\n')]);
+  entries.push(['SHA256SUMS.txt', Buffer.from(entries.map(([file, data]) =>
+    crypto.createHash('sha256').update(data).digest('hex') + '  ' + file).sort().join('\n') + '\n')]);
+  return entries;
 }
 const table = Uint32Array.from({ length: 256 }, (_, n) => {
   for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
@@ -94,8 +117,25 @@ function makeZip(entries) {
   end.writeUInt32LE(offset, 16);
   return Buffer.concat([...body, directory, end]);
 }
+function refreshArchiveChecksums(dir) {
+  // Rehash the files that exist now; previous manifests may be stale or incomplete.
+  const archives = fs.readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.zip'))
+    .map(entry => entry.name).sort();
+  const buffer = Buffer.alloc(1024 * 1024);
+  const lines = archives.map(name => {
+    const hash = crypto.createHash('sha256'), file = fs.openSync(path.join(dir, name), 'r');
+    try {
+      let count;
+      while ((count = fs.readSync(file, buffer, 0, buffer.length, null)) > 0)
+        hash.update(buffer.subarray(0, count));
+    } finally { fs.closeSync(file); }
+    return hash.digest('hex') + '  ' + name;
+  });
+  fs.writeFileSync(path.join(dir, 'SHA256SUMS.txt'), lines.length ? lines.join('\n') + '\n' : '');
+}
 function build() {
-  const files = [...rootFiles, ...roots.flatMap(collect)].sort();
+  const files = sourceFiles();
   const slug = `${pkg.name}-${pkg.version}`,
     entries = [],
     hashes = [];
@@ -111,14 +151,11 @@ function build() {
   const archive = makeZip(entries),
     name = slug + '.zip';
   fs.writeFileSync(path.join(dist, name), archive);
-  fs.writeFileSync(
-    path.join(dist, 'SHA256SUMS.txt'),
-    crypto.createHash('sha256').update(archive).digest('hex') + '  ' + name + '\n',
-  );
+  refreshArchiveChecksums(dist);
   console.log(
     `${name}: ${files.length} files, ${(archive.length / 1048576).toFixed(2)} MiB. Runtime data excluded.`,
   );
   return { name, files, archive, dir: dist };
 }
 if (require.main === module) build();
-module.exports = { build, excluded, makeZip };
+module.exports = { build, excluded, makeZip, sourceFiles, runtimeExcluded, runtimeEntries, refreshArchiveChecksums };

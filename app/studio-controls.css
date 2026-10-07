@@ -1,0 +1,19 @@
+/* Task grouping uses the common control tokens. */
+.studio-control-tabs{display:flex;gap:4px;position:sticky;top:0;z-index:8;margin:0 0 12px;padding:10px 0;background:var(--ui-panel);border-bottom:1px solid var(--ui-line)}
+.studio-control-tabs button{flex:1;min-width:0;min-height:var(--ui-control-height);padding:5px 6px;border:1px solid transparent!important;background:transparent!important;color:var(--ui-muted)!important;font-size:var(--ui-text-size)}
+.studio-control-tabs button[aria-selected=true]{background:var(--ui-selected)!important;color:var(--ui-text)!important;font-weight:600}
+.control-section[data-control-hidden=true],aside .controls>section[data-control-hidden=true]{display:none!important}
+.studio-control-empty{padding:14px 0;color:var(--ui-muted);font-size:var(--ui-small-size);line-height:1.7}
+.editor-scroll:has(.studio-control-tabs),aside .controls:has(.studio-control-tabs){padding-top:0}
+.studio-control-tabs button:focus-visible{outline:2px solid var(--ui-focus);outline-offset:-2px}
+.studio-controls-live .editor :is(input:not([type=range]):not([type=checkbox]),select,textarea),.studio-controls-music aside :is(input:not([type=range]):not([type=checkbox]),select,textarea){min-height:var(--ui-control-height);padding:6px 9px;background:var(--ui-field);color:var(--ui-text);border:1px solid var(--ui-line);border-radius:var(--ui-radius);font-size:var(--ui-text-size)}
+.studio-controls-live .editor :is(button,.button),.studio-controls-music aside :is(button,.button){min-height:var(--ui-control-height);font-size:var(--ui-text-size)}
+.studio-controls-live .editor label,.studio-controls-music aside label{color:var(--ui-muted);font-size:var(--ui-text-size)}
+.studio-controls-live .editor :is(h1,h2),.studio-controls-music aside h2{color:var(--ui-text);font-size:var(--ui-section-size);font-weight:650}
+.studio-controls-live .editor :is(.hint,p),.studio-controls-music aside :is(.hint,p){font-size:var(--ui-small-size);line-height:1.7;color:var(--ui-muted)}
+.studio-controls-live .editor .primary,.studio-controls-music aside .primary{background:var(--ui-primary);color:var(--ui-primary-text);border-color:var(--ui-primary)}
+.studio-controls-live .editor .control-section,.studio-controls-music aside .controls>section{border-color:var(--ui-line)}
+.studio-controls-live .editor-status,.studio-controls-music aside>#status{background:var(--ui-panel-soft);border-top-color:var(--ui-line);color:var(--ui-muted);font-size:var(--ui-small-size)}
+.studio-controls-music .preview{background:var(--ui-bg)}
+.studio-controls-music .mode-buttons button{background:var(--ui-control);color:var(--ui-text);border-color:var(--ui-line);border-radius:var(--ui-radius);font-size:var(--ui-text-size)}
+.studio-controls-music .mode-buttons button[aria-pressed=true]{background:var(--ui-primary);color:var(--ui-primary-text)}

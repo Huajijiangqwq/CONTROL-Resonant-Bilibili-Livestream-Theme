@@ -19,7 +19,7 @@ async function start() {
   if(!dataRoot || !path.isAbsolute(dataRoot))throw Error('数据目录无效');
   fs.mkdirSync(dataRoot,{recursive:true});
   const port=await choosePort(process.env.CONTROL_PORT?Number(process.env.CONTROL_PORT):undefined);
-  const live=require('../app/bilibili-server').startServer(port+2,{settingsFile:path.join(dataRoot,'bilibili-open-credentials.enc')});
+  const live=require('../app/bilibili-server').startServer(port+2,{sessionFile:path.join(dataRoot,'bilibili-session-credentials.enc')});
   services.push({close(){live.relay.disconnect();live.server.close();live.server.closeAllConnections();}});
   if(!live.server.listening)await new Promise((resolve,reject)=>{live.server.once('listening',resolve);live.server.once('error',reject);});
   const audio=require('../app/audio-server').createService({port:port+3,settingsFile:path.join(dataRoot,'audio-settings.json'),spawnMeter:macAudio?.spawnMeter});

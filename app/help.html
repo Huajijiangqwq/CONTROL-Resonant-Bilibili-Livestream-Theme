@@ -2,29 +2,30 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Beta 1 · 使用帮助</title>
+<title>Control Resonant · 使用帮助</title>
 <style>
-body{max-width:860px;margin:60px auto;padding:0 24px 64px;background:#1b1c1f;color:#ededea;font:16px/1.8 'Segoe UI','Microsoft YaHei',sans-serif}a{color:#d5a194}h1{font-size:32px}h2{margin-top:42px}code{background:#25262a;padding:3px 6px}nav{display:flex;flex-wrap:wrap;gap:12px 24px}.intro,.notice{padding:16px 20px;border-left:3px solid #cd574e;background:#25262a}.toc{padding:18px 22px;background:#222327}.toc a{white-space:nowrap}li{margin:8px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #424348}section{scroll-margin-top:24px}.experimental{margin-top:64px;border-top:1px solid #535055}
+body{max-width:860px;margin:60px auto;padding:0 24px 64px;background:#1b1c1f;color:#ededea;font:16px/1.8 'Segoe UI','Microsoft YaHei',sans-serif}a{color:#d5a194}h1{font-size:32px}h2{margin-top:42px}code{background:#25262a;padding:3px 6px}nav{display:flex;flex-wrap:wrap;gap:12px 24px}.intro,.notice{padding:16px 20px;border-left:3px solid #cd574e;background:#25262a}.toc{padding:18px 22px;background:#222327}.toc a{white-space:nowrap}li{margin:8px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #424348}section{scroll-margin-top:24px}.editor-guide{margin-top:64px;border-top:1px solid #535055}
 </style>
 </head>
 <body>
-<nav aria-label="主要功能"><a href="live.html">直播预览</a><a href="simulation.html">消息模拟</a><a href="now-playing.html">音乐皮肤</a><a href="monitor.html">组件监视面板</a></nav>
-<h1>Control Resonant · Beta 1</h1>
+<nav aria-label="主要功能"><a href="live.html">直播预览</a><a href="theme-editor.html">主题编辑器</a><a href="chat-editor.html">弹幕编辑器</a><a href="now-playing.html">音乐皮肤</a></nav>
+<h1>Control Resonant · 1.0.0</h1>
 <p class="intro"><b>AI 生成说明</b><br>本项目代码使用 GPT-6 Astra 生成，部分素材使用 image 生成。</p>
 <p>从直播预览选择布局、连接弹幕，再复制地址到 OBS。日常使用预设主题不需要打开编辑器。</p>
-<nav class="toc" aria-label="使用说明目录"><a href="#start">启动与退出</a><a href="#live">直播布局</a><a href="#bilibili">弹幕接入</a><a href="#obs">OBS</a><a href="#music">音乐皮肤</a><a href="#test">消息测试</a><a href="#settings">配置与备份</a><a href="#troubleshoot">常见问题</a><a href="#experimental">【实验功能】编辑器</a></nav>
+<p>版本 <code>1.0.0</code>。直播预览、主题编辑器、弹幕编辑器与音乐皮肤共用同一套工作区界面；重要主题请定期导出 JSON 备份。</p>
+<nav class="toc" aria-label="使用说明目录"><a href="#start">启动与退出</a><a href="#live">直播布局</a><a href="#bilibili">弹幕接入</a><a href="#obs">OBS</a><a href="#music">音乐皮肤</a><a href="#test">消息测试</a><a href="#settings">配置与备份</a><a href="#troubleshoot">常见问题</a><a href="#editors">主题与弹幕编辑器</a></nav>
 <section id="start"><h2>1. 启动与退出</h2>
 <p>解压整个桌面包，运行 <b>ControlResonant.exe</b>。客户端启动本地服务后直接打开直播预览，无需另装 Node.js。OBS 地址请以界面复制的地址为准。</p>
 <p>关闭窗口会留在托盘，让 OBS 继续显示。结束使用时，在托盘选择「退出并停止本地服务」。「关于与许可」可打开完整使用说明和数据目录。</p>
-<p>源码运行需要 Node.js 24+，也可通过根目录「启动全部服务.cmd」以浏览器模式使用。</p></section>
+<p>左侧提供直播预览、主题编辑器、弹幕编辑器和音乐皮肤四个工作区。顶部箭头可收起或展开导航，切换工作区继续保留这一偏好。各页面共用按钮、字体、颜色和控制栏样式。</p><p>源码运行需要 Node.js 24+，也可通过根目录「启动全部服务.cmd」以浏览器模式使用。</p></section>
 <section id="live"><h2>2. 直播布局</h2>
 <table><thead><tr><th>布局</th><th>展示方式</th></tr></thead><tbody><tr><td>完整主题</td><td>完整品牌区与右侧通讯记录。</td></tr><tr><td>游戏优先</td><td>扩大游戏占比，主题与消息更紧凑。</td></tr><tr><td>全屏分区</td><td>游戏铺满，普通弹幕、SC、礼物与上舰分区展示。</td></tr></tbody></table>
 <p>在「画面设置」填写主播名称和直播标题。全屏分区默认不显示标题（备注），需要时可勾选对应选项。游戏示例仅用于预览，输出前关闭「显示游戏示例画面」，再用自己的 OBS 游戏采集替换。</p>
-<p>切换布局保留消息与计时；手动添加的游戏采集需按界面给出的位置、尺寸调整。可为常用布局分别保存 OBS 场景。</p></section>
+<p>切换布局保留消息与计时；手动添加的游戏采集需按界面给出的位置、尺寸调整。可为常用布局分别保存 OBS 场景。</p><p>程序和 OBS 共用直播计时；暂停、继续、归零和设置已播时长实时同步。升级后在 OBS 刷新一次浏览器源即可载入新版，之后无需反复刷新。不会自动控制 OBS 开播或录制。</p><p>「画面来源」可切换到主题编辑器或弹幕编辑器的已应用版本。这个画面与对应固定 OBS 地址读取同一份主题，草稿修改需应用后才会显示。</p></section>
 <section id="bilibili"><h2>3. 弹幕接入</h2>
 <ol><li>在直播预览右侧顶部「弹幕接入」，将消息来源切换为 Bilibili 直播间。</li><li>点击「扫码登录」，使用哔哩哔哩 App 扫码并确认。</li><li>填写房间号或直播间链接，点击连接，观察状态与实际消息。</li></ol>
 <p>扫码后登录信息在当前 Windows 账户下加密保存，重启后不用重复填写。可清除已保存登录；手动填写 SESSDATA 只用于本次连接，不自动保存。不要填写整段 Cookie。</p>
-<p>也可尝试访客模式，但部分用户名可能被平台打码。主播身份码接入目前「暂未开放」。平台鉴权、网络或风控变化可能导致连接失败。</p></section>
+<p>也可尝试访客模式，但部分用户名可能被平台打码。平台鉴权、网络或风控变化可能导致连接失败。</p></section>
 <section id="obs"><h2>4. 放入 OBS</h2>
 <ol><li>直播预览中点击「复制 OBS 地址」。</li><li>OBS 新增「浏览器」来源，粘贴地址，宽高设为 <b>1920 × 1080</b>。</li><li>将游戏采集放在主题浏览器源下方，按页面提示调整位置与尺寸。</li><li>检查画面后，自行开始直播或录制。</li></ol>
 <p>使用预设主题无需开启 WebSocket。音乐皮肤也能单独添加，浏览器源尺寸为 <b>1920 × 560</b>。请使用本地 HTTP 地址，不要使用「本地文件」或 file://。直播期间保留客户端或托盘服务运行。</p></section>
@@ -32,21 +33,37 @@ body{max-width:860px;margin:60px auto;padding:0 24px 64px;background:#1b1c1f;col
 <p>默认通过 Windows 媒体会话（SMTC）读取播放器上报的歌曲、封面和进度。先播放音乐并确认播放器支持系统媒体控制。</p>
 <p>需要更广的平台适配时，选择「外部 now-playing-service」，点击「自动下载并配置」。程序从原作者官方 GitHub 下载、校验并安装服务，启动后保存连接；Windows 可能要求确认安装。已有服务会优先复用，也可手动连接，默认地址 <code>http://127.0.0.1:9863</code>。</p>
 <p>外部服务由 <a href="https://github.com/Widdit" target="_blank" rel="noopener">Widdit</a> 开发，项目为 <a href="https://github.com/Widdit/now-playing-service" target="_blank" rel="noopener">now-playing-service</a>，采用 MIT 许可。未随包捆绑其安装器或完整后端；详见随包 docs/音乐集成.md。</p>
-<p>歌名识别与音频捕获是两个功能。另行开启桌面或应用音频捕获后，流纹才会跟随真实声音。可调灵敏度、起跳、回落和已开放的质感参数。合成演示不播放声音，也不代表捕获成功。</p>
-<p>帧率可选 60 FPS、30 FPS 或自定义上限。性能不足时先降低帧率或效果强度。主直播页可按需开启内嵌 Now Playing。</p></section>
-<section id="test"><h2>6. 消息模拟与组件监视面板</h2>
-<p>「消息模拟」可本地发送普通弹幕、SC、礼物和三级上舰提示，检查排版与动画。可调整 SC、上舰及礼物的停留时长。分区布局中多个有效 SC 切换展示，各自倒计时继续。</p>
-<p>「组件监视面板」提供 14 个独立预览页，用于单独检查、录制特效，支持内容、位置和入退场时间设置。测试完成后清空消息，再切回真实接入；模拟消息不会发到直播间。</p></section>
+<p>歌名识别与音频捕获是两个功能。首次使用需开启桌面或应用音频捕获，流纹才会跟随真实声音。捕获开关与音源会保存，已开启时重新打开音乐页面或 OBS 来源会恢复捕获；需要停止时关闭开关。可调灵敏度、起跳与回落。</p>
+<p>音乐页「画面 → 录像质感」提供总体强度、轮廓柔化、拖色宽度、基础颜色错位、动态错位、偏色强度、信号颗粒和偶发干扰频率八项设置。拖动时可查看效果，设置由本机音乐服务保存，并同步到内嵌音乐与 OBS；重启后继续使用。</p><p>帧率可选 60 FPS、30 FPS 或自定义上限。性能不足时先降低帧率或效果强度。主直播页可按需开启内嵌 Now Playing。</p></section>
+<section id="test"><h2>6. 消息检查</h2>
+<p>在直播预览右侧「消息」面板发送一条普通弹幕、SC、礼物或上舰提示，检查排版和动画。测试默认仅在当前预览显示，需要检查 OBS 时再明确开启测试同步；不会向 Bilibili 直播间发送内容。</p>
+<p>公开版不包含独立消息实验室、组件监视录制与 SC 档位对比工具。编辑器仍保留制作主题需要的消息预览与动画时间轴。测试后清空示例，再切回真实接入。</p></section>
 <section id="settings"><h2>7. 配置、备份与许可</h2>
-<p>设置保存在本机。桌面版从「关于与许可 → 打开数据文件夹」查看；升级前退出客户端并保留数据目录。不同浏览器或端口的页面设置可能不同。扫码凭据加密保存，不随主题导出。</p>
+<p>设置保存在本机。桌面版从「关于与许可 → 打开数据文件夹」查看；升级前退出客户端并保留数据目录。不同浏览器或端口的页面设置可能不同。扫码凭据加密保存，不随主题导出。</p><p>编辑器的命名项目与回收站由本机项目库管理，自动草稿另行保留；保存项目不会覆盖已应用直播版本。迁移或分享时使用项目库的 JSON 导出，私人素材请自行确认后再分享。</p>
 <p>代码采用 MIT；原创文档及清单内的原创素材采用 CC BY 4.0；第三方代码、字体和游戏素材保留各自权利与声明。官方 Logo、FBC 标志及游戏示意图不属于本项目原创素材。详细清单见随包 THIRD_PARTY_NOTICES.md 和 docs/素材与许可.md。</p></section>
 <section id="troubleshoot"><h2>8. 常见问题</h2>
 <ul><li><b>OBS 空白：</b>先确认直播预览与服务正常，再检查浏览器源 URL、端口、尺寸和来源显隐。</li><li><b>没有弹幕：</b>检查来源、房间号和连接状态；登录过期时重新扫码。</li><li><b>有歌名但流纹不动：</b>检查音频捕获是否开启、音源是否正确并正在发声。</li><li><b>外部服务安装失败：</b>检查 GitHub 网络和 Windows 安装确认，重试自动配置；也可从原作者发布页手动安装。</li><li><b>特效卡顿：</b>减少同时显示的高强度消息，降低帧率与效果强度，用实际 OBS 输出尺寸检查。</li></ul>
-<p>测试阶段，欢迎反馈 bug 和建议。请附版本、操作步骤和截图，提交前移除个人凭据。</p></section>
-<section id="experimental" class="experimental"><h2>9. 【实验功能】主题编辑器与弹幕编辑器</h2>
-<p class="notice"><b>目前处在极早版本，存在诸多 bug 和问题。</b><br>两个编辑器位于客户端侧栏最下面。使用预设主题不必经过编辑器；尝试自定义前请导出重要主题 JSON 备份。</p>
-<p><a href="theme-editor.html">主题编辑器【实验功能】</a> 用于整个场景的自由排版、图层与开放的特效参数；从现有布局开始，添加或复制元素，再调整位置、宽高和显隐。主播名称、直播标题（备注）、直播状态可分别摆放；旧的组合标题层支持拆分。</p>
-<p><a href="chat-editor.html">弹幕编辑器【实验功能】</a> 用于消息区域内部的字体、部件与效果。组合弹幕区共享容器与上下文；独立消息图层可以分开摆放。时间轴仅支持已开放属性的关键帧。</p>
-<p>编辑器还提供实验性的「应用 / OBS」连接与布局同步：先在 OBS 开启 WebSocket，再创建或绑定场景。游戏仍由 OBS 采集；绑定后通常无需刷新来源，服务重启或场景集合变更后需恢复连接。程序不会开始、停止直播或录制。不要让多个编辑页面同时写入同一场景。</p>
-<p><code>Ctrl S</code> 保存草稿，<code>Ctrl Z</code> 撤销，<code>Ctrl D</code> 复制；跨设备迁移请在「文件」导出主题 JSON。完整操作见随包 docs/使用说明.md 的实验功能章节。</p></section>
+<p>欢迎反馈问题和建议。请附版本、操作步骤和截图，提交前移除个人凭据。</p></section>
+<section id="editors" class="editor-guide"><h2>9. 主题编辑器与弹幕编辑器</h2>
+<p class="notice">在侧栏直播预览下方打开主题编辑器或弹幕编辑器，调整场景与消息外观。它们和直播预览、音乐皮肤同级排列，支持项目保存、素材裁剪、图层样式与动画编辑。</p>
+<p><a href="theme-editor.html">主题编辑器</a> 用于整个场景的自由排版、图层与开放的特效参数；从现有布局开始，添加或复制元素，再调整位置、宽高和显隐。主播名称、直播标题（备注）、直播状态可分别摆放；旧的组合标题层支持拆分。</p>
+<p><a href="chat-editor.html">弹幕编辑器</a> 用于消息区域内部的字体、部件与效果。组合弹幕区共享容器与上下文；独立消息图层可以分开摆放。时间轴仅支持已开放属性的关键帧。</p>
+<h3>草稿、命名项目、已应用版本</h3>
+<table><thead><tr><th>状态</th><th>用途</th><th>直播画面</th></tr></thead><tbody><tr><td>自动草稿</td><td>继续上次编辑，修改后自动保留。</td><td>默认不变。</td></tr><tr><td>命名项目</td><td>在项目库留档，可打开、复制、导出。</td><td>保存不改变直播。</td></tr><tr><td>已应用版本</td><td>固定 OBS 地址与直播预览共同读取的主题。</td><td>点击应用后更新。</td></tr></tbody></table>
+<p>点击「项目 → 项目库」或左栏文件夹按钮，可搜索、命名保存、打开、重命名、创建副本或导出 JSON。移除的项目进入回收站，可恢复。「查看真实预览」按需播放已保存版本，不改变当前草稿或直播；列表缩略图仅表示布局。「导入到项目库」只建立留档，「项目 → 导入、导出与恢复 → 导入并打开主题」则替换当前草稿，请先保存重要修改。</p>
+<p><code>Ctrl/Cmd S</code> 保存命名项目，首次保存会要求名称；<code>Ctrl/Cmd Shift S</code> 另存副本。多窗口修改同一项目出现版本冲突时，可打开最新版本或另存当前内容，不会默默覆盖其他窗口的保存。</p>
+<h3>画面外也可以编辑</h3>
+<p>完整输出边界保持 <b>1920 × 1080</b>，框外是工作区。物件可以使用负坐标，或移出画面暂放；内容仍可看见、选中和编辑，<b>框外内容不进入完整直播输出</b>。弹幕编辑器中的边界表示正在编辑的容器。</p>
+<p>滚轮平移，空格或中键拖动平移，<code>Ctrl/Cmd + 滚轮</code> 围绕指针缩放。<code>F</code> 聚焦所选，<code>Shift F</code> 显示全部，<code>0</code> 返回画面；也可在缩放菜单选择「显示全部物件」。缩放视野不会修改直播输出尺寸。</p>
+<p>左栏切换「图层 / 组件」，右栏专注所选对象的属性。<code>Ctrl/Cmd C / V</code> 复制和粘贴图层，可在项目之间使用；<code>Ctrl/Cmd D</code> 直接创建副本。双击文字原位编辑，<code>Ctrl/Cmd Enter</code> 完成，<code>Esc</code> 取消。</p>
+<h3>素材裁剪与图层样式</h3>
+<p>图片、视频和素材背景的「布局 → 裁剪」调整取景，保留原文件与图层尺寸，支持拖动裁剪框和恢复完整素材。「样式 → 图层样式」可添加描边、内外发光、投影、颜色叠加、色调校正与模糊，最多六项，可开关、排序和前后比较。轮廓效果跟随内容透明度，渐变叠加尚未开放。SC、上舰和礼物使用各自的原生特效参数；图层样式不处理 OBS 游戏像素。</p>
+<h3>本地检查与实时弹幕</h3><p>编辑器打开时不自动填入示例消息。画布底部单独显示当前消息来源，与布局的应用状态分开。发送示例或操作时间轴后显示「本地示例」或「时间轴检查」；房间连接保持，可点击「返回实时」恢复最新真实弹幕，来源为本地消息时则显示「结束检查」。</p><h3>测试后再应用到直播</h3>
+<p>展开「动画预览」检查效果。编辑器与直播预览的测试默认只在本页显示；只有明确勾选「测试消息同步到直播 / OBS」，发送预览、混合演示和清空才会广播。真实弹幕来源与直播计时继续共用；测试不会向 Bilibili 直播间发送内容。</p>
+<ol><li>点击「应用到直播」，选择完整场景或仅组合弹幕区。</li><li>点击「将当前草稿应用到直播」，确认面板显示已应用主题和修订号。</li><li>复制固定 OBS 地址，按提示设置浏览器源尺寸；完整场景为 1920 × 1080。</li><li>点击「查看直播」，检查与 OBS 共用的已应用版本。后续再次应用沿用同一地址，通常无需刷新。</li></ol>
+<p>需要边改边播时，再明确开启「修改时实时应用到直播」。这个开关与测试消息同步独立；切换项目时会停用其他缓存编辑器的自动应用。手工添加的浏览器源仍需自行调整宽高，一键接入创建的受管来源会随应用更新尺寸。</p>
+<h3>一键接入 OBS</h3>
+<p>复制固定地址不需要 WebSocket。一键创建场景时先应用主题，再在 OBS 开启 WebSocket，通过「更多 → 一键接入 OBS」连接。默认使用已应用版本：草稿修改保持本地，再次应用同步主题与受管游戏采集的位置。断连保留待同步状态，重连后更新到最新版本；切换场景集合时等待原集合恢复。高级选项保留旧的草稿直接绑定方式。</p>
+<p>游戏仍由 OBS 采集，网页特效不能直接扭曲游戏像素。程序不会开始、停止直播或录制，也不会自动切换节目场景。完整操作见随包 docs/使用说明.md 的编辑器章节。</p>
+<p>Mac 提供 1.0.0 的 arm64 / x64 应用准备包，首次请完整解压并运行随包「修复并打开.command」，具体步骤见 README-macOS.md。M4 使用 arm64。应用未经过 Apple Developer ID 签名或公证，Mac 实际运行、系统权限与 OBS 联动仍需实机验证。</p></section>
 </body></html>

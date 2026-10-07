@@ -27,7 +27,9 @@
     if ((video && el.readyState < 2) || (image && (!el.complete || !el.naturalWidth))) return;
     const sw = video ? el.videoWidth : image ? el.naturalWidth : el.width,
       sh = video ? el.videoHeight : image ? el.naturalHeight : el.height;
-    const r = mediaRect(sw, sh, l.w, l.h, image || video ? l.fit : 'fill');
+    const r = (image || video) && window.ThemeMediaCrop
+      ? ThemeMediaCrop.rect(sw, sh, l.w, l.h, l.fit, l)
+      : mediaRect(sw, sh, l.w, l.h, image || video ? l.fit : 'fill');
     if (!r) return;
     try {
       c.drawImage(el, r.sx, r.sy, r.sw, r.sh, r.dx, r.dy, r.dw, r.dh);
@@ -66,6 +68,8 @@
     }
   }
   function draw(c, el, l) {
+    if (['image', 'video'].includes(l.type)) el = el.matches?.('img,video') ? el : el.querySelector('img,video');
+    if (!el) return;
     if (l.type === 'shape' || l.type === 'line') shape(c, l);
     else if (['IMG', 'VIDEO', 'CANVAS'].includes(el.tagName)) media(c, el, l);
   }

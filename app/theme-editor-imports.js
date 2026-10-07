@@ -55,5 +55,9 @@
       name: file.name,
     };
   }
-  window.ThemeEditorImports = { validate, read };
+  function validateDocument(raw) {
+    if (!window.ThemeDocumentValidation) throw Error('主题验证模块尚未准备好，请刷新页面后重试。');
+    return window.ThemeDocumentValidation.validate(raw, window.ThemeEditorModel);
+  }
+  window.ThemeEditorImports = { validate, read, validateDocument };
 })();

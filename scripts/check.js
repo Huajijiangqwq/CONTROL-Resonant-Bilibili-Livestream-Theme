@@ -5,6 +5,8 @@ const fs = require('node:fs'),
 const root = path.resolve(__dirname, '..'),
   app = path.join(root, 'app');
 const errors = [];
+const publicAudit = require('./public-dependencies').validate(require('./package').runtimeEntries());
+errors.push(...publicAudit.errors);
 let checked = 0,
   resources = 0;
 function walk(dir) {
@@ -79,5 +81,5 @@ if (errors.length) {
   process.exitCode = 1;
 } else
   console.log(
-    `Checked ${checked} source files and ${resources} resource references. No missing assets or syntax errors.`,
+    `Checked ${checked} source files, ${resources} source references and ${publicAudit.references} public runtime references. No missing assets or syntax errors.`,
   );

@@ -4,6 +4,7 @@ const http = require('node:http'),
   fs = require('node:fs'),
   path = require('node:path');
 const root = __dirname;
+const releaseProfile = require('./release-profile');
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -43,9 +44,16 @@ function createPreviewServer({
   onStop = null,
   stopToken = null,
   dataRoot = root,
+  development = process.env.CONTROL_DEV === '1',
 } = {}) {
-  const obs = require('./obs-bridge.js').createObsBridge({ root: dataRoot, model: themeModel });
-  const server = http.createServer((req, res) => {
+  development = releaseProfile.developmentEnabled(development);
+  const published = require('./theme-publish-server.js').createThemePublish({ dataRoot, model: themeModel });
+  const obs = require('./obs-bridge.js').createObsBridge({ root: dataRoot, model: themeModel, publication: published });
+  const timer = require('./live-timer-server.js').createTimer({ dataRoot });
+  const editorMessages = require('./editor-message-server.js').createEditorMessages({ dataRoot });
+  const library = require('./project-library-server.js').createProjectLibrary({ dataDirectory: dataRoot });
+  const studioEvents = require('./studio-events-server.js').createStudioEvents({ timer, messages: editorMessages, published, obsPublished: obs.managed });
+  const server = http.createServer(async (req, res) => {
     let requestHost;
     try {
       requestHost = new URL('http://' + req.headers.host).hostname;
@@ -67,6 +75,27 @@ function createPreviewServer({
       }
       res.writeHead(200).end('Stopping');
       setTimeout(() => onStop?.(), 30);
+      return;
+    }
+    if (req.url === '/api/studio-events') {
+      studioEvents.handle(req, res);
+      return;
+    }
+    if (req.url?.startsWith('/api/projects')) {
+      try { await library.handle(req, res, new URL(req.url, 'http://' + req.headers.host)); }
+      catch { if (!res.headersSent) res.writeHead(500).end('Project storage unavailable'); else res.end(); }
+      return;
+    }
+    if (req.url?.startsWith('/api/theme-publish')) {
+      published.handle(req, res);
+      return;
+    }
+    if (req.url?.startsWith('/api/editor-messages/')) {
+      editorMessages.handle(req, res);
+      return;
+    }
+    if (req.url?.startsWith('/api/live-timer')) {
+      timer.handle(req, res);
       return;
     }
     if (req.url?.startsWith('/api/obs/')) {
@@ -99,7 +128,7 @@ function createPreviewServer({
           const raw = JSON.parse(Buffer.concat(chunks).toString('utf8'));
           if (raw.format !== 'control-theme' || raw.version !== 1 || !Array.isArray(raw.layers))
             throw Error('format');
-          const doc = themeModel().normalize(raw),
+          const doc = require('./project-library-server.js').cleanDocument(raw, themeModel()),
             text = JSON.stringify(doc),
             id = require('node:crypto')
               .createHash('sha256')
@@ -142,11 +171,18 @@ function createPreviewServer({
         return;
       }
       const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'theme-editor.html';
+      const disposition = releaseProfile.pageDisposition(relative, url, development);
+      if (disposition === 'deny') throw Error('development-only');
+      if (disposition === 'live') {
+        res.writeHead(302, { Location: 'live.html', 'Cache-Control': 'no-store' }).end();
+        return;
+      }
       file = path.resolve(root, relative);
       if (
-        /^(?:theme-live(?:[\\/]|$)|(?:audio|now-playing)-settings\.json$)/i.test(relative) ||
-        /^bilibili-(?:server|protocol|qr-auth|session-store|open-(?:store|protocol|relay))\.js$/i.test(relative) ||
+        /^(?:theme-live(?:[\\/]|$)|(?:timer-state|editor-message-state)\.json(?:\.tmp)?$|(?:audio|now-playing)-settings\.json$)/i.test(relative) ||
+        /^bilibili-(?:server|protocol|qr-auth|session-store|credentials)\.js$/i.test(relative) ||
         /^(?:external-now-playing(?:[\\/]|$)|now-playing-setup\.js$)/i.test(relative) ||
+        /^release-profile\.js$/i.test(relative) ||
         /(?:^|[\\/])bilibili-(?:open|session)-credentials\.enc(?:\.tmp)?$/i.test(relative) ||
         /(?:^|[\\/])credential-key\.enc(?:\.tmp)?$/i.test(relative) ||
         !file.startsWith(root + path.sep) ||
@@ -163,6 +199,17 @@ function createPreviewServer({
     fs.stat(file, (error, stat) => {
       if (error || !stat.isFile()) {
         res.writeHead(404).end();
+        return;
+      }
+      if (path.basename(file) === 'runtime-config.js' || (!development && path.extname(file) === '.html')) {
+        fs.readFile(file, 'utf8', (readError, text) => {
+          if (readError) { res.writeHead(500).end(); return; }
+          const content = path.basename(file) === 'runtime-config.js'
+            ? releaseProfile.runtimeConfig(text, development) : releaseProfile.publicHtml(text);
+          res.writeHead(200, { 'Content-Type': types[path.extname(file)], 'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff', 'Content-Length': Buffer.byteLength(content) });
+          res.end(req.method === 'HEAD' ? undefined : content);
+        });
         return;
       }
       const headers = {
@@ -222,7 +269,11 @@ function createPreviewServer({
       }),
     close: () =>
       new Promise((resolve) => {
+        studioEvents.close();
         obs.close();
+        timer.close();
+        editorMessages.close();
+        published.close();
         server.close(resolve);
       }),
   };

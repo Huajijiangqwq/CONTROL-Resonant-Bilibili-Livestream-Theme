@@ -1,6 +1,6 @@
 'use strict';
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const { protect } = require('./bilibili-open-store');
+const { protect } = require('./bilibili-credentials');
 function sessionValue(value) {
   if (typeof value !== 'string' || !value || value.length > 4096 || /[\s;\x00-\x1f\x7f]/.test(value))
     throw Error('登录凭据格式无效，请重新扫码。');

@@ -3,20 +3,22 @@
   const $ = (id) => document.getElementById(id),
     key = 'hiss-main-live-v1',
     params = new URLSearchParams(location.search),
-    obs = params.has('obs');
+    obs = params.has('obs'), isolatedPreview = params.has('libraryPreview');
+  const presetMode = LiveState.storesPreset(params, new URLSearchParams(location.hash.slice(1)));
   let stored = {};
   try {
-    stored = JSON.parse(localStorage.getItem(key) || '{}') || {};
+    if (presetMode) stored = JSON.parse(localStorage.getItem(key) || '{}') || {};
   } catch {}
-  let state = LiveState.fromQuery(params, LiveState.normalize(obs ? {} : stored)),
+  let state = LiveState.fromQuery(params, LiveState.normalize(presetMode ? stored : {})),
     chatReady = false,
     chatInstance = null,
     chatProbe = null,
     chatPaused = false,
     chatAuto = false,
-    liveMode = params.get('source') === 'live',
+    liveMode = !isolatedPreview && params.get('source') === 'live',
     pending = [],
-    previewGame = true;
+    previewGame = true,
+    timerReceived = false;
   const draftKey = 'hiss-main-composer-v1',
     draftFields = {
       sender: 'sendName',
@@ -38,6 +40,20 @@
   });
   let previewGeneration = 0,
     previewAttempt = 0;
+  let liveConnection = null;
+  const authoringPreview = EditorPreviewSource.create({
+    enabled: params.has('editor'),
+    source: () => liveMode ? 'live' : 'simulation',
+    clear() {
+      resetPreviews(); deliveries.clear();
+      pending = pending.filter(item => !['live', 'manual', 'restore', 'delete', 'editor-demo', 'editor-send', 'editor-preview', 'editor-seek'].includes(item.command));
+      post('clear'); post('pause', false);
+    },
+    restore() { liveConnection?.restoreCurrent(); },
+    changed(state) {
+      if (params.has('editor')) parent.postMessage({ channel: 'editor-preview-source', ...state }, location.origin);
+    },
+  });
   function resetPreviews() {
     previewGeneration++;
     previews.clear();
@@ -52,7 +68,7 @@
     $('editorStatus').dataset.tone = tone;
   }
   function persist() {
-    if (obs) return;
+    if (!LiveState.storesPreset(params, new URLSearchParams(location.hash.slice(1)))) return;
     try {
       localStorage.setItem(key, JSON.stringify(state));
     } catch {}
@@ -62,11 +78,12 @@
     if (el.textContent !== value) el.textContent = value;
   }
   function syncTimer() {
+    $('timerText').style.visibility = timerReceived ? '' : 'hidden';
     const value = LiveState.format(LiveState.elapsed(state));
     const parts = value.split(':');
     for (const [i, id] of ['timerH', 'timerM', 'timerS'].entries()) setText(id, parts[i]);
-    setText('timerControl', value);
-    setText('timerState', state.startedAt === null ? '已暂停' : '计时中');
+    setText('timerControl', timerReceived ? value : '--:--:--');
+    setText('timerState', !timerReceived ? '正在同步' : state.startedAt === null ? '已暂停' : '计时中');
     setText('timerToggle', state.startedAt === null ? '继续计时' : '暂停计时');
   }
   function sync() {
@@ -88,6 +105,13 @@
         (window.LiveLayout?.current === 'custom' &&
           window.CustomLayout?.value.elements.music.enabled),
       container = $('nowPlayingSlot');
+    if (isolatedPreview) {
+      container.hidden = !enabled;
+      container.dataset.offlinePreview = 'true';
+      container.textContent = enabled ? 'NOW PLAYING · 音乐位置预览' : '';
+      Object.assign(container.style, { color: '#eeeae1', font: '22px sans-serif', border: '1px solid #777568', display: enabled ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' });
+      return;
+    }
     $('nowPlayingEnabled').checked = enabled;
     $('scene').classList.toggle('has-now-playing', enabled);
     container.hidden = !enabled;
@@ -180,15 +204,15 @@
       chatProbe = null;
       post('fps', fps());
       post('source', liveMode);
-      if (!liveMode && !obs) post('demo');
+      const seedExamples = window.ThemeDevelopment === true && !liveMode && !obs &&
+        !params.has('published') && !params.has('editor') && !isolatedPreview;
+      if (seedExamples) post('demo');
       const queued = pending;
       pending = [];
       for (const item of queued) post(item.command, item.data);
       $('previewStatus').textContent = liveMode
         ? '等待直播间消息'
-        : obs
-          ? '等待第一条消息'
-          : '四类弹幕已载入 · 可手动发送';
+        : seedExamples ? '四类弹幕已载入 · 可手动发送' : '等待第一条消息';
     } else if (event.data.type === 'receipt')
       deliveries.acknowledge(event.data.receipt, event.data.accepted);
     else if (event.data.type === 'manual-receipt')
@@ -254,24 +278,32 @@
     resetPreviews();
     deliveries.clear();
     liveMode = on;
+    authoringPreview.sourceChanged();
     sourceUI();
     post('source', on);
+    window.dispatchEvent(new CustomEvent('live-message-source', { detail: on ? 'live' : 'simulation' }));
     tell(on ? '已切换到真实弹幕。' : '已切换到本地模拟。');
   }
-  BilibiliLive.mount({
+  if (!isolatedPreview) liveConnection = BilibiliLive.mount({
     setSource: sourceChanged,
     reset() {
+      if (authoringPreview.inspecting) return;
       resetPreviews();
       deliveries.clear();
       post('clear');
     },
     restore(items) {
+      if (authoringPreview.inspecting) return;
       post('restore', items);
     },
     receive(item) {
+      // The Bilibili journal still records this item; the local inspection
+      // canvas resumes from its current snapshot without re-triggering alerts.
+      if (authoringPreview.inspecting) return true;
       return deliveries.send(item);
     },
     remove(ids) {
+      if (authoringPreview.inspecting) return;
       post('delete', ids);
     },
     status(phase, roomId) {
@@ -306,20 +338,38 @@
       if (!composing && !event.isComposing) commit();
     });
   }
-  $('timerToggle').addEventListener('click', () => {
-    state = LiveState.toggle(state);
-    syncTimer();
-    persist();
+  let timerTask = Promise.resolve();
+  if (isolatedPreview) { timerReceived = true; state = { ...state, elapsedMs: 0, startedAt: null }; }
+  const sharedTimer = isolatedPreview ? { command: async () => false, close() {} } : window.LiveTimerSync.create({
+    writer: !obs || params.has('editor'),
+    seed: () => ({ elapsedMs: state.elapsedMs, startedAt: state.startedAt }),
+    apply(value) {
+      timerReceived = true;
+      state = { ...state, ...value };
+      syncTimer(); persist();
+      window.dispatchEvent(new CustomEvent('live-timer-change', { detail: value }));
+    },
+    status({ ready, busy }) {
+      for (const id of ['timerToggle', 'timerReset', 'timerApply']) $(id).disabled = !ready || busy;
+      $('timerHint').textContent = ready
+        ? '程序与 OBS 共用计时；暂停、继续、归零和修改时长实时同步。'
+        : '正在重新连接计时服务；连接恢复后自动同步。';
+    },
   });
-  $('timerReset').addEventListener('click', () => {
-    state = LiveState.reset(state);
-    syncTimer();
-    persist();
+  function timerCommand(action, extra) {
+    timerTask = sharedTimer.command(action, extra);
+    return timerTask;
+  }
+  $('timerToggle').addEventListener('click', () => {
+    timerCommand(state.startedAt === null ? 'resume' : 'pause');
+  });
+  $('timerReset').addEventListener('click', async () => {
+    if (!await timerCommand('reset')) return;
     tell(
       state.startedAt === null ? '直播计时已归零，当前保持暂停。' : '直播计时已归零并继续计时。',
     );
   });
-  function applyTimer() {
+  async function applyTimer() {
     const value = LiveState.parseDuration($('timerOffset').value);
     if (value === null) {
       $('timerHint').textContent = '请按 时:分:秒 填写，例如 01:28:36。';
@@ -328,10 +378,10 @@
       $('timerOffset').focus();
       return;
     }
-    state = { ...state, elapsedMs: value, startedAt: state.startedAt === null ? null : Date.now() };
+    if (!await timerCommand('set', { elapsedMs: value })) return;
     $('timerOffset').value = LiveState.format(value);
     $('timerOffset').removeAttribute('aria-invalid');
-    $('timerHint').textContent = '已更新时长，刷新后保留计时状态。';
+    $('timerHint').textContent = '已同步到程序与 OBS，刷新后保留计时状态。';
     syncTimer();
     persist();
     tell(
@@ -380,6 +430,7 @@
     tell('四类提示正在各自区域播放。');
   });
   $('demoButton').addEventListener('click', () => {
+    window.EditorMessageSync?.publish('editor-demo');
     resetPreviews();
     chatPaused = false;
     $('pauseChat').textContent = '暂停';
@@ -387,6 +438,7 @@
     tell('已恢复示例。');
   });
   $('clearButton').addEventListener('click', () => {
+    window.EditorMessageSync?.publish('clear');
     resetPreviews();
     post('clear');
     tell('弹幕已清空。');
@@ -457,7 +509,7 @@
     }
     const generation = previewGeneration,
       attempt = ++previewAttempt;
-    const result = previews.send({
+    const message = {
       kind,
       sender: $('sendName').value,
       body,
@@ -467,10 +519,12 @@
       giftName: $('giftName').value,
       quantity: Number($('giftCount').value),
       value: Number($('giftValue').value),
-    });
+    };
+    const result = previews.send(message);
     tell('正在加入预览队列…', 'pending');
     Promise.resolve(result).then((accepted) => {
       if (generation !== previewGeneration || attempt !== previewAttempt || liveMode) return;
+      if (accepted) window.EditorMessageSync?.publish('editor-send', message);
       tell(
         accepted
           ? short
@@ -502,9 +556,10 @@
     syncMusicFps();
   });
   window.addEventListener('storage', (event) => {
-    if (event.key === key && !obs) {
+    if (event.key === key && presetMode) {
       try {
-        state = LiveState.normalize(JSON.parse(event.newValue) || {});
+        const clock = { elapsedMs: state.elapsedMs, startedAt: state.startedAt };
+        state = { ...LiveState.normalize(JSON.parse(event.newValue) || {}), ...clock };
         sync();
       } catch {}
     }
@@ -540,13 +595,26 @@
   });
   $('closeDialog').addEventListener('click', () => $('urlDialog').close());
   window.ThemeLiveBridge = {
+    get ready() { return chatReady; },
+    get messageSource() { return liveMode ? 'live' : 'simulation'; },
+    get previewSource() { return authoringPreview.state(); },
+    beginLocalPreview(mode, options) { return authoringPreview.begin(mode, options); },
+    resumeMessages() { return authoringPreview.resume(); },
+    remotePreview(command, data) { if (['editor-send', 'editor-demo', 'clear'].includes(command)) post(command, data); },
+    setMessageSource(value) {
+      const field = $('messageSource');
+      if (!['live', 'simulation'].includes(value) || field.value === value) return;
+      field.value = value;
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    },
     get timer() {
       return { elapsedMs: state.elapsedMs, startedAt: state.startedAt };
     },
     setTimer(value) {
-      state = LiveState.normalize({ ...state, ...value });
-      syncTimer();
+      // Old theme documents and OBS URL snapshots must never rewind the live clock.
+      if (isolatedPreview && value) { state = { ...state, elapsedMs: Number(value.elapsedMs) || 0, startedAt: null }; syncTimer(); }
     },
+    get settled() { return timerTask; },
   };
   new ResizeObserver(fit).observe(document.querySelector('.monitor'));
   window.addEventListener('resize', fit);
@@ -560,6 +628,7 @@
   chatProbe = setInterval(probeChat, 1000);
   probeChat();
   window.addEventListener('pagehide', () => {
+    sharedTimer.close();
     clearInterval(chatProbe);
     deliveries.clear();
     resetPreviews();

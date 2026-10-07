@@ -5,6 +5,7 @@ const http = require('node:http'),
   { spawn } = require('node:child_process'),
   { Worker } = require('node:worker_threads');
 const { normalizeTrack } = require('./now-playing-dsp');
+const MusicSettings = require('./now-playing-settings');
 const EMPTY = () => ({
   connected: false,
   hasSong: false,
@@ -43,11 +44,14 @@ function createService({
     texture: 0.65,
     flow: 1,
     fps: 60,
+    signal: { ...MusicSettings.signalDefaults },
+    signalConfigured: false,
   };
   let config = { ...defaults };
   try {
     config = { ...config, ...validate(JSON.parse(fs.readFileSync(settingsFile, 'utf8'))) };
   } catch {}
+  config.signal = MusicSettings.normalizeSignal(config.signal);
   const clients = new Set();
   let capture = null,
     worker = null,
@@ -111,6 +115,9 @@ function createService({
       if (typeof input.enabled !== 'boolean') throw Error('开关无效');
       result.enabled = input.enabled;
     }
+    if (input.signal !== undefined) result.signal = MusicSettings.signalPatch(input.signal, true);
+    // This flag is read from saved configuration; normal updates set it server-side.
+    if (typeof input.signalConfigured === 'boolean') result.signalConfigured = input.signalConfigured;
     const bounds = {
       gain: [-24, 24],
       floor: [-100, -25],
@@ -435,7 +442,7 @@ function createService({
       if (config.enabled && !capture) startCapture();
       res.on('close', () => {
         clients.delete(res);
-        if (!clients.size) orphan = setTimeout(stopCapture, 30000);
+        if (!clients.size && !closing) orphan = setTimeout(stopCapture, 30000);
       });
       return;
     }
@@ -495,8 +502,14 @@ function createService({
           if (config.enabled) startCapture();
           pollMusic();
         } else {
-          const updates = validate(data),
-            next = { ...config, ...updates };
+          const updates = validate(data);
+          delete updates.signalConfigured;
+          if (data.command === 'migrate-signal' && config.signalConfigured) delete updates.signal;
+          const next = { ...config, ...updates };
+          if (updates.signal) {
+            next.signal = { ...config.signal, ...updates.signal };
+            next.signalConfigured = true;
+          }
           if (next.floor >= next.ceiling - 6) throw Error('灵敏度范围太窄');
           const restart = next.source !== config.source || next.enabled !== config.enabled;
           if (next.musicProvider !== config.musicProvider) builtin.stop();

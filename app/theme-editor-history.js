@@ -8,8 +8,8 @@
       past = [],
       future = [];
     let pending = null,
-      nextId = 0;
-    function capture(doc) {
+      nextId = 0, restoredState = null;
+    function capture(doc, uiState = null) {
       const refs = new Set(),
         text = JSON.stringify(doc, (key, value) => {
           if (key !== 'src' || typeof value !== 'string' || !/^data:(?:image|video)\//.test(value))
@@ -24,7 +24,7 @@
           return { $historyAsset: entry.id };
         });
       for (const id of refs) assets.get(id).refs++;
-      return { text, refs };
+      return { text, refs, uiState: uiState ? structuredClone(uiState) : null };
     }
     function release(snapshot) {
       if (!snapshot) return;
@@ -60,9 +60,9 @@
       list.push(snapshot);
       while (list.length > limit) release(list.shift());
     }
-    function checkpoint(doc) {
+    function checkpoint(doc, uiState = null) {
       release(pending);
-      pending = capture(doc);
+      pending = capture(doc, uiState);
     }
     function commit(doc) {
       if (!pending) return false;
@@ -75,14 +75,14 @@
       clearList(future);
       return true;
     }
-    function undo(doc, redo = false) {
+    function undo(doc, redo = false, uiState = null) {
       commit(doc);
       release(pending);
       pending = null;
       const a = redo ? future : past,
         b = redo ? past : future;
       if (!a.length) return null;
-      const current = capture(doc);
+      const current = capture(doc, uiState);
       let target;
       while (a.length) {
         const candidate = a.pop();
@@ -98,6 +98,7 @@
         return null;
       }
       const result = restore(target);
+      restoredState = target.uiState ? structuredClone(target.uiState) : null;
       push(b, current);
       release(target);
       return result;
@@ -105,6 +106,7 @@
     function clear() {
       release(pending);
       pending = null;
+      restoredState = null;
       clearList(past);
       clearList(future);
     }
@@ -113,6 +115,7 @@
       commit,
       undo,
       clear,
+      get uiState() { return restoredState ? structuredClone(restoredState) : null; },
       get canUndo() {
         return past.length > 0;
       },

@@ -5,10 +5,11 @@
   if (!/^[a-f0-9]{24}$/.test(id || '')) return;
   let packet = null,
     revision = -1,
-    lastFrame = 0,
     raf = 0,
     source = null,
     stopped = false;
+  const gate = window.FrameRate?.gate(), fps = Number(new URLSearchParams(location.search).get('fps'));
+  if (gate && Number.isInteger(fps) && fps >= 1 && fps <= 240) gate.getLimit = () => fps;
   const scene = document.getElementById('scene');
   function draw(now) {
     raf = 0;
@@ -17,11 +18,12 @@
       raf = requestAnimationFrame(draw);
       return;
     }
-    if (now - lastFrame < 31 && Date.now() < packet.startAt + packet.duration) {
+    // The geometry and fluid animation follow the same configured frame cap.
+    // Always commit the endpoint even when it falls between gated frames.
+    if (gate && !gate.due(now) && Date.now() < packet.startAt + packet.duration) {
       raf = requestAnimationFrame(draw);
       return;
     }
-    lastFrame = now;
     try {
       window.ThemeRenderer.apply(ThemeSyncMotion.at(packet));
       if (scene) {

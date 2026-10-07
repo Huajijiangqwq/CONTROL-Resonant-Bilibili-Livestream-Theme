@@ -4,6 +4,14 @@
   let openGuide = () => {};
   const tasks = [
     {
+      id: 'crop', types: ['image', 'video'], label: '裁剪图片与视频',
+      detail: '调整取景范围，保留原素材和图层框；随时恢复完整画面。', section: '裁剪',
+    },
+    {
+      id: 'effects', types: ['image', 'video', 'text', 'shape', 'border', 'logos'], label: '编辑图层样式',
+      detail: '描边、发光、叠色、投影可排序和单独关闭，整体开关比较前后效果。', section: '图层样式',
+    },
+    {
       id: 'logos',
       types: ['logos'],
       label: '编排中英双 Logo',
@@ -133,12 +141,24 @@
   function install({ jump, getProject, chatMode }) {
     const dialog = document.getElementById('helpDialog');
     dialog.classList.add('guide-dialog');
-    dialog.querySelector('h2').textContent = '原版效果 · 自定义指南';
+    dialog.querySelector('h2').textContent = '编辑器操作指南';
     const shortcuts = dialog.querySelector('.shortcuts'),
       details = document.createElement('details');
     details.className = 'guide-shortcuts';
     const summary = document.createElement('summary');
     summary.textContent = '画布快捷键';
+    shortcuts.replaceChildren();
+    for (const [key, description] of [
+      ['V / H', '选择 / 抓手'], ['空格 / 中键拖动', '平移工作区'],
+      ['Ctrl/Cmd + 滚轮', '围绕指针缩放'], ['F / Shift F / 0', '聚焦所选 / 显示全部 / 返回输出画面'],
+      ['Shift + 单击', '增减选择'], ['方向键 / Shift + 方向键', '移动 1 / 10 像素'],
+      ['图层列表：↑ ↓ / ← →', '上下导航选择 / 展开折叠，Esc 回画布再微移'],
+      ['图层列表：F2 / Shift F10', '改名 / 打开操作菜单'],
+      ['Ctrl/Cmd Z / Ctrl/Cmd Shift Z', '撤销 / 重做'], ['Ctrl/Cmd D / Delete', '复制图层 / 删除'],
+      ['Ctrl/Cmd C / Ctrl/Cmd V', '复制到剪贴板 / 粘贴图层；可跨项目使用'],
+      ['Ctrl/Cmd G / Ctrl/Cmd Shift G', '编组 / 解组'], ['双击文字', '直接编辑；Ctrl/Cmd Enter 完成，Esc 取消'],
+      ['Ctrl/Cmd S / Ctrl/Cmd Shift S', '保存命名项目 / 另存副本'], ['G / Escape', '切换网格 / 取消选择'],
+    ]) { const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=description;shortcuts.append(dt,dd); }
     details.append(summary, shortcuts);
     dialog.append(details);
     const content = document.createElement('div');
@@ -177,11 +197,11 @@
     for (const [title, text] of [
       [
         '编辑空间',
-        '拖动素材栏、属性栏边缘调整宽度，拖动中间分隔线分配属性与图层高度。双击恢复默认；这些调整只改变编辑器。',
+        '左侧切换图层与组件，右侧专注所选物件的属性；拖动两侧边缘调整宽度，双击边缘恢复默认。画布周围可暂放物件，框外不进入完整直播输出。使用“侧栏”按钮可给工作区更多空间。',
       ],
       [
         '比例与字号',
-        '改变容器或组件占位宽度时，文字重新换行。修改徽记和文字的大小，请进入对应内部部件。回放消息后切换“跟随排版 / 自由定位”，会保留部件当前位置并换算整条位置轨道。',
+        '改变容器或组件占位宽度时，文字重新换行。图片、视频、背景、形状和边框可在变换中锁定宽高比，数字输入与拖角都会联动；Shift 拖角临时保持比例。修改徽记和文字大小请进入对应内部部件。回放消息后切换“跟随排版 / 自由定位”，会保留部件当前位置并换算整条位置轨道。',
       ],
       [
         '动画的三个层次',
@@ -193,7 +213,7 @@
       ],
       [
         '预览与正式使用',
-        '发送预览和单条回放都使用当前编辑样式；通用样式可切换不同等级检查。混合演示按正式消息档位展示。再暂停、拖动时间轴检查。上一帧 / 下一帧按当前帧率步进，也可按逗号 / 句号；输入文字时不会触发。从“应用 / OBS”选择完整场景或仅组合弹幕区，按面板给出的像素尺寸设置浏览器源。手动发布地址是快照，后续修改需要重新发布；启用 OBS 实时绑定后，修改会自动同步，无需刷新浏览器源。',
+        '展开“动画预览”，发送消息或逐帧检查；测试默认只在编辑器显示。按“保存项目”留档，再用“应用到直播”更新直播预览与固定 OBS 地址。保存与应用是两个动作；后续再次应用无需更换固定地址。需要边改边播或向 OBS 发送测试消息时，在应用面板分别开启对应选项。',
       ],
     ]) {
       const h = document.createElement('h3'),

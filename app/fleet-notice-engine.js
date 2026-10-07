@@ -687,10 +687,12 @@ function materialFrame(sourceTime,alpha=1,energy=0){
     const reveal = smooth(465, 585, t);
     if (reveal <= 0 || innerWidth <= 0) return;
     const rank = options.rank;
+    const departure = options.exitProgress >= 0 && window.NativeNoticeMotion?.fleetExit(options.exitProgress, rank, NativeNoticeMotion.reduced);
     c.save();
     c.globalAlpha =
-      (options.exitProgress >= 0 ? 1 - smooth(0.08, 0.55, options.exitProgress) : 1) *
+      (departure ? departure.iconAlpha : options.exitProgress >= 0 ? 1 - smooth(0.08, 0.55, options.exitProgress) : 1) *
       componentAlpha;
+    if (departure) c.translate(0, departure.iconY);
     c.strokeStyle = options.partColor || '#f4f4f8';
     c.fillStyle = options.partColor || '#f4f4f8';
     c.lineWidth = 7;
@@ -704,7 +706,8 @@ function materialFrame(sourceTime,alpha=1,energy=0){
     c.scale(iconScale * contraction, iconScale * contraction);
     c.translate(-430, -349);
     c.beginPath();
-    c.rect(340, 349 - 65 * reveal, 180, 130 * reveal);
+    const aperture = reveal * (departure ? departure.iconClip : 1);
+    c.rect(340, 349 - 65 * aperture, 180, 130 * aperture);
     c.clip();
     if (rank === 'governor') {
       c.beginPath();
@@ -841,16 +844,18 @@ function materialFrame(sourceTime,alpha=1,energy=0){
     // The outer contour withdraws before the inner outline turns. The icon and
     // ambient fragments keep their own coordinates; no whole-badge bitmap spin.
     const [ow, oy, iw, iy] = geometry(1750),
-      outer = smooth(0.02, 0.51, p),
-      inner = smooth(0.16, 0.76, p);
+      motion = window.NativeNoticeMotion?.fleetExit(p, options.rank, NativeNoticeMotion.reduced),
+      outer = motion ? motion.outer : smooth(0.02, 0.51, p),
+      inner = motion ? motion.inner : smooth(0.16, 0.76, p),
+      outerW = ow * (motion?.outerScale ?? 1), outerY = oy + (ow - outerW) * .866 / 3;
     if (!options.skipLegacyParticles) scatteredLight(age);
     c.save();
     c.setLineDash(outer > 0 ? [Math.max(0.01, ow * 3.02 * (1 - outer)), ow * 3.1] : []);
     triangle(
-      ow,
-      oy,
+      outerW,
+      outerY,
       (options.rank === 'governor' ? 0.83 : options.rank === 'admiral' ? 0.66 : 0.42) *
-        (1 - smooth(0.3, 0.55, p)),
+        (motion ? motion.outerAlpha : 1 - smooth(0.3, 0.55, p)),
     );
     c.restore();
     rankContour(1750, ow, oy);
@@ -858,20 +863,23 @@ function materialFrame(sourceTime,alpha=1,energy=0){
     c.save();
     const pivotY = iy + (iw * 0.866) / 3;
     c.translate(cx, pivotY);
-    c.rotate(-Math.PI * 0.5 * inner);
+    c.rotate(motion ? motion.innerAngle : -Math.PI * 0.5 * inner);
     c.translate(-cx, -pivotY);
-    triangle(iw, iy, (options.rank === 'captain' ? 0.8 : 0.98) * (1 - smooth(0.37, 0.81, p)));
+    const innerW = iw * (motion?.innerScale ?? 1), innerY = pivotY - innerW * .866 / 3;
+    triangle(innerW, innerY, (options.rank === 'captain' ? 0.8 : 0.98) * (motion ? motion.innerAlpha : 1 - smooth(0.37, 0.81, p)));
     c.restore();
     icon(1750, iw, iy);
     if (options.skipLegacyLabel) return;
     const l = labelLayout(),
       close = smooth(0.48, 0.91, p),
-      height = Math.max(0.001, l.barH * (1 - close)),
-      finish = 1 - smooth(0.9, 1, p);
+      height = Math.max(0.001, l.barH * (motion ? motion.titleHeight : 1 - close)),
+      finish = motion ? motion.titleAlpha : 1 - smooth(0.9, 1, p),
+      labelWidth = l.targetW * (motion?.titleWidth ?? 1);
     c.save();
+    c.translate(0, motion?.titleY || 0);
     c.globalAlpha = finish * componentAlpha;
     c.beginPath();
-    c.rect(cx - l.targetW / 2, 493.5 - height / 2, l.targetW, height);
+    c.rect(cx - labelWidth / 2, 493.5 - height / 2, labelWidth, height);
     c.clip();
     c.fillStyle = '#edecf1';
     c.fillRect(cx - l.targetW / 2, 493.5 - l.barH / 2, l.targetW, l.barH);
@@ -881,10 +889,12 @@ function materialFrame(sourceTime,alpha=1,energy=0){
     c.textBaseline = 'middle';
     c.font = '900 ' + l.titleSize + 'px ' + family;
     c.fillStyle = '#15151b';
+    c.globalAlpha *= motion?.titleInkAlpha ?? 1;
     c.fillText(l.title, cx, 494, l.targetW - 22);
     c.restore();
     c.save();
-    c.globalAlpha = (1 - smooth(0.6, 1, p)) * componentAlpha;
+    c.globalAlpha = (motion ? motion.nameAlpha : 1 - smooth(0.6, 1, p)) * componentAlpha;
+    c.translate(0, motion?.nameY || 0);
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     c.fillStyle = '#e4e3ec';
@@ -924,23 +934,25 @@ function materialFrame(sourceTime,alpha=1,energy=0){
   }
   function componentLabels(age, exit) {
     const l = labelLayout();
+    const departure = exit >= 0 && window.NativeNoticeMotion?.fleetExit(exit, options.rank, NativeNoticeMotion.reduced);
     componentPart('title', (part) => {
       const t = sourceAt(Math.max(0, age - (part.delay || 0)), options.rank),
         enter = smooth(433, 700, t);
       if (enter <= 0) return;
       const close = exit >= 0 ? smooth(0.48, 0.91, exit) : 0,
-        barWidth = 13 + (l.targetW - 13) * Math.pow(enter, 2.1),
-        height = Math.max(0.001, l.barH * (1 - close));
+        barWidth = (13 + (l.targetW - 13) * Math.pow(enter, 2.1)) * (departure?.titleWidth ?? 1),
+        height = Math.max(0.001, l.barH * (departure ? departure.titleHeight : 1 - close));
       c.save();
+      c.translate(0, departure?.titleY || 0);
       c.beginPath();
       c.rect(cx - barWidth / 2, 493.5 - height / 2, barWidth, height);
       c.clip();
-      c.globalAlpha = componentAlpha * (exit >= 0 ? 1 - smooth(0.9, 1, exit) : 1);
+      c.globalAlpha = componentAlpha * (departure ? departure.titleAlpha : exit >= 0 ? 1 - smooth(0.9, 1, exit) : 1);
       c.fillStyle = part.fill || '#edecf1';
       c.fillRect(cx - barWidth / 2, 493.5 - l.barH / 2, barWidth, l.barH);
       c.fillStyle = paperPattern(c);
       c.fillRect(cx - barWidth / 2, 493.5 - l.barH / 2, barWidth, l.barH);
-      c.globalAlpha *= smooth(620, 750, t);
+      c.globalAlpha *= smooth(620, 750, t) * (departure?.titleInkAlpha ?? 1);
       c.fillStyle = part.color || '#15151b';
       c.font = (part.weight || 900) + ' ' + l.titleSize + 'px ' + (options.titleFace || family);
       c.textAlign = 'center';
@@ -949,6 +961,7 @@ function materialFrame(sourceTime,alpha=1,energy=0){
       c.restore();
     });
     componentPart('name', (part) => {
+      c.translate(0, departure?.nameY || 0);
       c.beginPath();
       c.rect(
         cx - options.nameWidth / 2 - 1 / options.scale,
@@ -959,7 +972,7 @@ function materialFrame(sourceTime,alpha=1,energy=0){
       c.clip();
       const t = sourceAt(Math.max(0, age - (part.delay || 0)), options.rank);
       c.globalAlpha =
-        componentAlpha * smooth(650, 820, t) * (exit >= 0 ? 1 - smooth(0.6, 1, exit) : 1);
+        componentAlpha * smooth(650, 820, t) * (departure ? departure.nameAlpha : exit >= 0 ? 1 - smooth(0.6, 1, exit) : 1);
       c.fillStyle = part.color || '#e4e3ec';
       c.font = (part.weight || 500) + ' ' + l.nameSize + 'px ' + (options.nameFace || family);
       c.textAlign = 'center';

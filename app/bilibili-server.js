@@ -3,9 +3,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { BilibiliOpenRelay } = require('./bilibili-open-relay');
-const { createStore } = require('./bilibili-open-store');
-const { config: openConfig } = require('./bilibili-open-protocol');
+const releaseProfile = require('./release-profile');
 const { createSessionStore } = require('./bilibili-session-store');
 const { createQrAuth } = require('./bilibili-qr-auth');
 const {
@@ -327,13 +325,17 @@ class BilibiliRelay {
   }
 }
 function startServer(port = 8793, options = {}) {
+  const development = releaseProfile.developmentEnabled(options.development ?? process.env.CONTROL_DEV === '1');
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid port');
   const token = crypto.randomBytes(32).toString('hex'),
     clients = new Set();
+  const journal = require('./live-message-journal.js').createMessageJournal();
   const origins = new Set(
     [port - 2, port - 1, port].flatMap((p) => ['http://127.0.0.1:' + p, 'http://localhost:' + p]),
   );
   const publish = (event, data) => {
+    if (event === 'status') journal.status(data);
+    if (event === 'message') journal.message(data);
     const body = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const client of clients) {
       if (client.writableLength > 1024 * 1024) {
@@ -342,34 +344,16 @@ function startServer(port = 8793, options = {}) {
       } else client.write(body);
     }
   };
-  let active;
   const web = new BilibiliRelay((event, data) => {
-    if (active === web) publish(event, event === 'status' ? { ...data, mode: 'web' } : data);
+    publish(event, event === 'status' ? { ...data, mode: 'web' } : data);
   });
-  const open = new BilibiliOpenRelay((event, data) => {
-    if (active === open) publish(event, data);
-  }, options.open);
-  const store = options.store || createStore({ file: options.settingsFile });
   const sessions = options.sessionStore || createSessionStore({ file: options.sessionFile });
   const qrAuth = createQrAuth(sessions, options.qr);
-  const openAvailable = options.enableOpen === true;
-  const openInfo = () => ({ ...store.info(), available: openAvailable });
-  active = web;
   const relay = {
-    get state() { return { ...active.state, mode: active === open ? 'open' : 'web' }; },
-    disconnect() { return active.disconnect(); },
-    connect(room, session) { roomNumber(room); open.disconnect(); active = web; web.connect(room, session); },
-    connectOpen(value) { web.disconnect(); active = open; open.connect(value); },
+    get state() { return { ...web.state, mode: 'web' }; },
+    disconnect() { return web.disconnect(); },
+    connect(room, session) { return web.connect(room, session); },
   };
-  function mergedConfig(input, requireCode) {
-    const value = store.read();
-    for (const key of ['appId', 'accessKeyId', 'accessKeySecret', 'code']) {
-      if (input[key] !== undefined && typeof input[key] !== 'string') throw Error('身份码配置格式不正确。');
-      if (input[key]?.trim()) value[key] = input[key].trim();
-    }
-    value.autoConnect = input.autoConnect === true;
-    return openConfig(value, requireCode);
-  }
   const json = (res, status, value) => {
     res.writeHead(status, {
       'Content-Type': 'application/json; charset=utf-8',
@@ -417,7 +401,7 @@ function startServer(port = 8793, options = {}) {
       return json(res, 400, { error: '无效地址。' });
     }
     if (url.pathname === '/api/health' && req.method === 'GET')
-      return json(res, 200, { service: 'hiss-bilibili', version: 4, token, status: relay.state, openSettings: openInfo(), login: sessions.info() });
+      return json(res, 200, { service: 'hiss-bilibili', version: 5, token, status: relay.state, login: sessions.info() });
     if (url.pathname === '/api/events' && req.method === 'GET') {
       if (clients.size >= 16) return json(res, 429, { error: '预览窗口过多，请关闭部分窗口。' });
       res.writeHead(200, {
@@ -427,6 +411,7 @@ function startServer(port = 8793, options = {}) {
         'X-Accel-Buffering': 'no',
       });
       res.write(`event: status\ndata: ${JSON.stringify(relay.state)}\n\n`);
+      res.write(`event: snapshot\ndata: ${JSON.stringify(journal.snapshot())}\n\n`);
       clients.add(res);
       const keep = setInterval(() => res.write(': keepalive\n\n'), 15000);
       req.on('close', () => {
@@ -470,32 +455,15 @@ function startServer(port = 8793, options = {}) {
         }
         if (url.pathname === '/api/login/forget') {
           qrAuth.cancel(); sessions.clear();
-          if (active === web) web.disconnect();
+          web.disconnect();
           return json(res, 200, { ok: true, login: sessions.info() });
         }
         if (url.pathname === '/api/connect') {
-          if (body.mode === 'open') {
-            if (!openAvailable) return json(res, 501, { error: '主播身份码接入暂未开放。请先使用房间号 / SESSDATA 接入。' });
-            const value = mergedConfig(body.open || {}, true);
-            if (body.remember === true) store.save(value);
-            else store.clear();
-            relay.connectOpen(value);
-          } else if (body.mode === undefined || body.mode === 'web') {
-            if (body.session !== undefined && typeof body.session !== 'string') throw Error('登录信息格式无效。');
-            const session = body.guest === true ? '' : body.session?.trim() || sessions.read();
-            relay.connect(body.room, session);
-          }
-          else throw Error('接入方式无效。');
+          if (body.mode !== undefined && body.mode !== 'web') throw Error('接入方式无效。');
+          if (body.session !== undefined && typeof body.session !== 'string') throw Error('登录信息格式无效。');
+          const session = body.guest === true ? '' : body.session?.trim() || sessions.read();
+          relay.connect(body.room, session);
           return json(res, 202, { ok: true, status: relay.state });
-        }
-        if (url.pathname === '/api/open-settings') {
-          if (!openAvailable) return json(res, 501, { error: '主播身份码接入暂未开放。' });
-          store.save(mergedConfig(body, false));
-          return json(res, 200, { ok: true, status: relay.state, openSettings: openInfo() });
-        }
-        if (url.pathname === '/api/open-forget') {
-          store.clear();
-          return json(res, 200, { ok: true, status: relay.state, openSettings: openInfo() });
         }
         if (url.pathname === '/api/disconnect') {
           relay.disconnect();
@@ -517,12 +485,16 @@ function startServer(port = 8793, options = {}) {
       res.writeHead(400);
       return res.end();
     }
+    const disposition = releaseProfile.pageDisposition(name, url, development);
+    if (disposition === 'deny') { res.writeHead(404); return res.end(); }
+    if (disposition === 'live') { res.writeHead(302, { Location: 'live.html', 'Cache-Control': 'no-store' }); return res.end(); }
     const skinFont = /^now-playing-fonts\/[a-z0-9.-]+\.woff2$/.test(name);
     if (
       (name !== path.basename(name) && !skinFont) ||
       name.includes('\\') ||
       !mime[path.extname(name)] ||
-      /^bilibili-(?:server|protocol|qr-auth|session-store|open-(?:store|protocol|relay))\.js$/.test(name)
+      /^bilibili-(?:server|protocol|qr-auth|session-store|credentials)\.js$/.test(name)
+      || name === 'release-profile.js'
     ) {
       res.writeHead(404);
       return res.end();
@@ -538,6 +510,13 @@ function startServer(port = 8793, options = {}) {
     }
     res.setHeader('Content-Type', mime[path.extname(name)]);
     res.setHeader('Cache-Control', 'no-cache');
+    if (name === 'runtime-config.js' || (!development && name.endsWith('.html'))) {
+      const text = fs.readFileSync(file, 'utf8'), content = name === 'runtime-config.js'
+        ? releaseProfile.runtimeConfig(text, development) : releaseProfile.publicHtml(text);
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Length', Buffer.byteLength(content));
+      return res.end(req.method === 'HEAD' ? undefined : content);
+    }
     if (req.method === 'HEAD') {
       res.setHeader('Content-Length', stat.size);
       return res.end();
@@ -549,7 +528,6 @@ function startServer(port = 8793, options = {}) {
   });
   server.listen(port, '127.0.0.1', () => {
     console.log('Bilibili 本地接入已启动，端口：' + port);
-    if (openAvailable && store.info().autoConnect) relay.connectOpen(store.read());
   });
   server.on('close', () => {
     qrAuth.cancel();

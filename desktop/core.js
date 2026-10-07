@@ -2,7 +2,7 @@
 const net = require('node:net');
 const fs = require('node:fs');
 const path = require('node:path');
-const PAGES = Object.freeze({theme:'theme-editor.html',chat:'chat-editor.html',live:'live.html',simulation:'simulation.html',music:'now-playing.html',monitor:'monitor.html'});
+const PAGES = Object.freeze({theme:'theme-editor.html',chat:'chat-editor.html',live:'live.html',music:'now-playing.html'});
 const OFFSETS = [0,2,3,4];
 function free(port) {
   return new Promise(resolve => {

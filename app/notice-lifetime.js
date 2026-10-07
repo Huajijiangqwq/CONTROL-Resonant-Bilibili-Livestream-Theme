@@ -18,11 +18,12 @@
       );
     return out;
   }
-  function start(m, clock, entry, config) {
+  function start(m, clock, entry, config, restoredAge = 0) {
     if (!['fleet', 'gift'].includes(m.kind)) return;
     const c = normalize(config),
       hold = c[m.kind + 'Hold'];
-    m.noticeExitAt = hold === 0 ? Infinity : clock + Math.max(0, entry) + hold * 1000;
+    const age = Number.isFinite(restoredAge) ? Math.max(0, restoredAge) : 0;
+    m.noticeExitAt = hold === 0 ? Infinity : clock - age + Math.max(0, entry) + hold * 1000;
     m.noticeExitMs = c[m.kind + 'Exit'] * 1000;
   }
   function progress(m, clock) {

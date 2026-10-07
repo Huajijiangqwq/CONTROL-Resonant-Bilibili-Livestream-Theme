@@ -1,4 +1,4 @@
-name: Beta checks
+name: Source and release checks
 on: [push, pull_request]
 permissions:
   contents: read

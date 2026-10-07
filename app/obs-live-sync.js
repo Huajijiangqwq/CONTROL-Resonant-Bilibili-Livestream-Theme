@@ -411,6 +411,7 @@ function createLiveSync({ root, connection, model, ErrorType = Error }) {
       theme: themeId,
       obs: '1',
       live: id,
+      chatSync: data.messageChannel === 'chat' ? 'chat' : new URL(old.url).searchParams.get('chatSync') || 'theme',
     }).toString();
     if (output === 'chat') {
       url.searchParams.set('output', 'chat');

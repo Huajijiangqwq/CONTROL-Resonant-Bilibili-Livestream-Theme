@@ -108,7 +108,7 @@
     apply.onclick = () => {
       const saved = selected();
       if (!saved || locked) return;
-      change((layer) => Object.assign(layer, structuredClone(M.normalizeStyle(saved).style)));
+      if (change((layer) => Object.assign(layer, structuredClone(M.normalizeStyle(saved).style))) === false) return;
       toast('已应用样式，可撤销恢复。');
     };
     const name = document.createElement('input');

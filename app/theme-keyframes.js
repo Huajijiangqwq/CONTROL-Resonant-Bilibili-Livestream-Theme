@@ -2,8 +2,8 @@
 (function (root) {
   'use strict';
   const ranges = {
-    x: [-600, 1920],
-    y: [-600, 1080],
+    x: [-7680, 7680],
+    y: [-4320, 4320],
     opacity: [0, 1],
     anchorX: [0, 1920],
     anchorY: [0, 1080],
@@ -103,12 +103,16 @@
     for (const track of Array.isArray(raw) ? raw.slice(0, 12) : []) {
       if (!track || !allowed.includes(track.property) || used.has(track.property)) continue;
       used.add(track.property);
-      const times = new Map();
-      for (const key of Array.isArray(track.keys) ? track.keys.slice(0, maxKeys) : []) {
+      const times = new Map(), identities = new Set();
+      for (const [index, key] of (Array.isArray(track.keys) ? track.keys.slice(0, maxKeys) : []).entries()) {
         if (!key || !Number.isFinite(+key.value)) continue;
         const time = Math.round(n(key.time, 0, 30000)),
           range = ranges[track.property];
+        let id = /^[a-z0-9_-]{1,80}$/i.test(key.id || '') ? key.id : 'key-' + index;
+        for (let suffix = 1; identities.has(id); suffix++) id = 'key-' + index + '-' + suffix;
+        identities.add(id);
         times.set(time, {
+          id,
           time,
           value: n(key.value, ...range),
           ease: ['linear', 'smooth', 'in', 'out', 'hold', 'bezier'].includes(key.ease)
@@ -135,7 +139,9 @@
       return true;
     }
     if (track.keys.length >= maxKeys) return false;
-    track.keys.push({ time: at, value, ease: 'smooth' });
+    let id = 'key-at-' + at;
+    for (let suffix = 1; track.keys.some(k => k.id === id); suffix++) id = 'key-at-' + at + '-' + suffix;
+    track.keys.push({ id, time: at, value, ease: 'smooth' });
     return true;
   }
   function availableTime(keys, index, time) {

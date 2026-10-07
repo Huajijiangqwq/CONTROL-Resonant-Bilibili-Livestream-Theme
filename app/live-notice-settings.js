@@ -2,7 +2,7 @@
   'use strict';
   const key = 'hiss-notice-times-v1',
     p = new URLSearchParams(location.search),
-    obs = p.has('obs'),
+    obs = !LiveState.storesPreset(p, new URLSearchParams(location.hash.slice(1))),
     frame = document.getElementById('chatFrame');
   let raw = {};
   try {

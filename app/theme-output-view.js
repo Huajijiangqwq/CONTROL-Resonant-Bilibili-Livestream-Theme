@@ -40,11 +40,36 @@
     module.exports = api;
     return;
   }
-  const mode = new URLSearchParams(location.search).get('output') === 'chat' ? 'chat' : 'scene';
-  let rect = null;
+  const params = new URLSearchParams(location.search), published = params.has('published');
+  const explicitPure = params.has('obs') || params.has('pure');
+  let mode = params.get('output') === 'chat' ? 'chat' : 'scene', rect = null, restorePure = false, receivedMode = false;
   api.mode = mode;
+  function modeClasses(next) {
+    const html = document.documentElement, viewport = document.getElementById('sceneViewport'), scene = document.getElementById('scene');
+    if (next === 'chat') {
+      if (!html.classList.contains('chat-output')) restorePure = html.classList.contains('pure');
+      html.classList.add('chat-output', 'pure');
+      html.classList.toggle('live-theme-output', params.has('obs') || params.has('live'));
+    } else {
+      html.classList.remove('chat-output', 'live-theme-output');
+      if (!explicitPure && !restorePure) html.classList.remove('pure');
+      for (const key of ['width', 'height', 'aspect-ratio']) viewport?.style.removeProperty(key);
+      scene?.style.removeProperty('transform');
+      html.dataset.outputWidth = '1920'; html.dataset.outputHeight = '1080';
+    }
+  }
+  api.setMode = (next, chatId) => {
+    // Immutable snapshot/editor views still use their URL contract. Only the
+    // fixed publication endpoint is allowed to follow a new output scope.
+    if (!published) return false;
+    const value = next === 'chat' ? 'chat' : 'scene';
+    api.chatId = chatId || '';
+    if (mode !== value || !receivedMode) { mode = value; api.mode = value; rect = null; modeClasses(value); }
+    receivedMode = true;
+    return true;
+  };
   api.apply = (value) => {
-    const doc = prepare(value, mode, new URLSearchParams(location.search).get('chat'));
+    const doc = prepare(value, mode, api.chatId || new URLSearchParams(location.search).get('chat'));
     rect = mode === 'chat' ? crop(doc) : null;
     return doc;
   };
@@ -54,7 +79,7 @@
       viewport = document.getElementById('sceneViewport'),
       scene = document.getElementById('scene');
     if (!monitor || !viewport || !scene) return false;
-    const scale = new URLSearchParams(location.search).has('live')
+    const scale = params.has('live') || params.has('obs')
       ? 1
       : Math.max(0.001, Math.min(monitor.clientWidth / rect.w, monitor.clientHeight / rect.h));
     Object.assign(viewport.style, {
@@ -68,14 +93,12 @@
     return true;
   };
   root.ThemeOutput = api;
-  if (mode === 'chat') {
-    document.documentElement.classList.add('chat-output', 'pure');
-    if (new URLSearchParams(location.search).has('live'))
-      document.documentElement.classList.add('live-theme-output');
+  if (mode === 'chat' || published) {
+    if (mode === 'chat') modeClasses('chat');
     const style = document.createElement('style');
     style.textContent =
       '.chat-output,.chat-output body{background:transparent!important}.chat-output.live-theme-output .monitor{display:block;padding:0}.chat-output.live-theme-output #sceneViewport{margin:0}.chat-output #scene{visibility:hidden}.chat-output #scene[data-theme-ready=true]{visibility:visible}.chat-output #sceneViewport{flex:none}.chat-output .game-window{display:none!important}';
     document.head.append(style);
-    window.addEventListener('theme-applied', api.fit);
+    window.addEventListener('theme-applied', () => { if (!api.fit() && published) window.dispatchEvent(new Event('resize')); });
   }
 })(globalThis);

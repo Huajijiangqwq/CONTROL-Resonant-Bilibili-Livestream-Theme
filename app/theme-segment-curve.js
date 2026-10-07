@@ -3,6 +3,7 @@
   'use strict';
   const K = ThemeKeyframes,
     ui = new Map();
+  const activeDrags = new Map();
   const defaults = (type) =>
     type === 'linear'
       ? [0, 0, 1, 1]
@@ -113,6 +114,12 @@
       refresh();
     };
     function draw() {
+      const currentKeys = get()?.keys || [];
+      for (let i = 0; i < segment.options.length; i++) {
+        const a = currentKeys[i], b = currentKeys[i + 1];
+        if (a && b) segment.options[i].textContent = '第 ' + (i + 1) + ' → ' + (i + 2) + ' 帧 · ' +
+          (a.time / 1000).toFixed(2) + ' – ' + (b.time / 1000).toFixed(2) + ' s';
+      }
       const curve = read(),
         [x1, y1, x2, y2] = curve,
         x = (v) => 24 + 196 * v,
@@ -154,6 +161,7 @@
           curve = read();
         start();
         drag = { index: i, inverse, point, curve };
+        activeDrags.set(plot, finishDrag);
         plot.setPointerCapture(e.pointerId);
       };
       dot.onkeydown = (e) => {
@@ -178,12 +186,14 @@
       c[drag.index * 2 + 1] -= (point.y - drag.point.y) / 108;
       write(c);
     };
-    plot.onpointerup = plot.onpointercancel = () => {
+    function finishDrag() {
+      activeDrags.delete(plot);
       if (drag) {
         drag = null;
         end();
       }
-    };
+    }
+    plot.onpointerup = plot.onpointercancel = plot.onlostpointercapture = finishDrag;
     inputs.forEach((input, i) => {
       let editing = false;
       input.oninput = () => {
@@ -199,7 +209,8 @@
       const commit = () => {
         if (editing) {
           editing = false;
-          end();
+          end({ fields: false });
+          input.value = +read()[i].toFixed(3);
         }
       };
       input.onchange = input.onblur = commit;
@@ -210,12 +221,15 @@
         }
       };
     });
+    details.refreshCurve = draw;
     draw();
   }
   window.ThemeSegmentCurve = {
     mount,
+    get isInteracting() { for (const surface of activeDrags.keys()) if (!surface.isConnected) activeDrags.delete(surface); return activeDrags.size > 0; },
     activate(id, index) {
       ui.set(id, { index, open: true });
     },
   };
+  window.addEventListener('blur', () => { for (const finish of [...activeDrags.values()]) finish(); });
 })();

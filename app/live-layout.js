@@ -5,7 +5,7 @@
     select = document.getElementById('layoutSelect');
   if (!scene || !select) return;
   const params = new URLSearchParams(location.search),
-    obs = params.has('obs'),
+    obs = !LiveState.storesPreset(params, new URLSearchParams(location.hash.slice(1))),
     key = 'hiss-main-layout-v1',
     C = LiveLayoutConfig,
     M = LiveLayoutMotion;
@@ -15,7 +15,7 @@
   } catch {}
   // Custom composition belongs to the editor and its published OBS output.
   // The standalone live preview offers only the three finished layouts.
-  const allowCustom = params.has('editor') || params.has('theme') || params.has('live') || obs ||
+  const allowCustom = params.has('editor') || params.has('theme') || params.has('live') || params.has('published') || obs ||
     new URLSearchParams(location.hash.slice(1)).has('theme');
   const normalize = (value) => {
     const next = C.normalize(value);

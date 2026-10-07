@@ -281,6 +281,10 @@
       };
       c.translate(anim.dx, anim.dy);
       c.globalAlpha *= anim.opacity;
+      if (window.NativeNoticeMotion && !window.ThemeKeyframes?.hasTracks(p, motionExit)) {
+        const accent = NativeNoticeMotion.scPart(p.kind, age - (p.delay || 0), motionExit, data.tier, NativeNoticeMotion.reduced);
+        c.translate(accent.x, accent.y); c.globalAlpha *= accent.alpha;
+      }
       if (p.kind === 'card') {
         c.fillStyle = p.color;
         c.fillRect(p.x, p.y, p.w, p.h);

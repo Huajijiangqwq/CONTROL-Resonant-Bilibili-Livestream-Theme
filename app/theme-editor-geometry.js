@@ -60,6 +60,68 @@
     const d = vector(p.x - rect.x - rect.w / 2, p.y - rect.y - rect.h / 2, -(rect.rotation || 0));
     return Math.abs(d.x) <= rect.w / 2 + pad && Math.abs(d.y) <= rect.h / 2 + pad;
   }
+  function hitLayer(rect, p, pad = 0) {
+    const local = unprojectPoint(rect, p);
+    if (rect.type === 'background' && rect.mode === 'transparent') return false;
+    if (rect.type !== 'border' && !(rect.type === 'shape' && ['none', 'transparent'].includes(rect.fill)))
+      return contains(rect, p, rect.type === 'line' ? pad : 0);
+    const stroke = Math.max(0, Number(rect.strokeWidth) || 0);
+    if (!stroke) return false;
+    const tolerance = stroke / 2 + pad;
+    if (rect.borderStyle === 'corners') {
+      const gap = Math.min(rect.cornerInset || 0, rect.w / 2, rect.h / 2),
+        length = Math.max(0, Math.min(rect.cornerLength || 0, (rect.w - 2 * gap) / 2, (rect.h - 2 * gap) / 2));
+      if (!length) return false;
+      const distance = (x1, y1, x2, y2) => {
+        const dx = x2 - x1, dy = y2 - y1,
+          t = Math.max(0, Math.min(1, ((local.x - x1) * dx + (local.y - y1) * dy) / (dx * dx + dy * dy)));
+        return Math.hypot(local.x - x1 - dx * t, local.y - y1 - dy * t);
+      };
+      return [[gap, gap, 1, 1], [rect.w - gap, gap, -1, 1], [gap, rect.h - gap, 1, -1], [rect.w - gap, rect.h - gap, -1, -1]]
+        .some(([x, y, sx, sy]) => Math.min(distance(x, y, x + sx * length, y), distance(x, y, x, y + sy * length)) <= tolerance);
+    }
+    const roundedDistance = inset => {
+      const w = Math.max(0, rect.w - inset * 2), h = Math.max(0, rect.h - inset * 2),
+        radius = Math.max(0, Math.min((rect.radius || 0) - (inset > stroke ? inset : 0), w / 2, h / 2)),
+        x = Math.abs(local.x - rect.w / 2) - w / 2 + radius,
+        y = Math.abs(local.y - rect.h / 2) - h / 2 + radius;
+      return Math.abs(Math.hypot(Math.max(x, 0), Math.max(y, 0)) + Math.min(Math.max(x, y), 0) - radius);
+    };
+    return roundedDistance(stroke / 2) <= tolerance ||
+      (rect.borderStyle === 'double' && roundedDistance(stroke * 2 + 3) <= tolerance);
+  }
+  function selectionUnits(layers, selected, editable = () => true) {
+    const ids = selected instanceof Set ? selected : new Set(selected), units = [];
+    for (const l of layers) {
+      if (!ids.has(l.id) || (l.parent && ids.has(l.parent))) continue;
+      const members = (l.type === 'group' ? layers.filter(c => c.parent === l.id) : [l])
+        .filter(editable);
+      if (members.length) units.push({ id: l.id, members, bounds: visualBounds(members) });
+    }
+    return units;
+  }
+  function marqueeSelection(layers, area, { painted = () => true, editable = () => true, deep = false } = {}) {
+    const visible = layers.filter(l => l.type !== 'group' && painted(l)),
+      inside = l => {
+        const box = visualBounds([l]);
+        return box.x >= area.x && box.y >= area.y && box.x + box.w <= area.x + area.w && box.y + box.h <= area.y + area.h;
+      };
+    if (deep) return visible.filter(l => editable(l) && inside(l)).map(l => l.id);
+    const result = visible.filter(l => !l.parent && editable(l) && inside(l)).map(l => l.id);
+    for (const group of layers.filter(l => l.type === 'group' && editable(l))) {
+      const members = visible.filter(l => l.parent === group.id);
+      if (members.length && members.some(editable) && members.every(inside)) result.push(group.id);
+    }
+    return result;
+  }
+  function alignmentDelta(rect, target, edge) {
+    return {
+      x: edge === 'left' ? target.x - rect.x : edge === 'right' ? target.x + target.w - rect.x - rect.w
+        : edge === 'center' ? target.x + target.w / 2 - rect.x - rect.w / 2 : 0,
+      y: edge === 'top' ? target.y - rect.y : edge === 'bottom' ? target.y + target.h - rect.y - rect.h
+        : edge === 'middle' ? target.y + target.h / 2 - rect.y - rect.h / 2 : 0,
+    };
+  }
   // Change coordinate systems without moving the native part or its trajectory.
   function rebasePart(part, placement, layout) {
     const next = structuredClone(part);
@@ -71,7 +133,7 @@
       ['y', layout.layoutY],
     ]) {
       const delta = (placement === 'free' ? 1 : -1) * base,
-        maximum = axis === 'x' ? 1920 : 1080;
+        maximum = axis === 'x' ? 7680 : 4320;
       next[axis] = (part[axis] || 0) + delta;
       for (const track of [...(next.tracks || []), ...(next.exitTracks || [])])
         if (track.property === axis) for (const key of track.keys) key.value += delta;
@@ -81,7 +143,7 @@
           .filter((t) => t.property === axis)
           .flatMap((t) => t.keys.map((k) => k.value)),
       ];
-      if (values.some((v) => v < -600 || v > maximum)) return null;
+      if (values.some((v) => v < -maximum || v > maximum)) return null;
     }
     return next;
   }
@@ -97,8 +159,8 @@
         origin = (layout?.[axis] ?? base) - (sample[axis] ?? base),
         tracks = [...value.tracks, ...value.exitTracks].filter((t) => t.property === axis),
         values = [base, ...tracks.flatMap((t) => t.keys.map((k) => k.value))],
-        limit = axis === 'x' ? 1920 : 1080,
-        lo = -600 - Math.min(...values) - origin,
+        limit = axis === 'x' ? 7680 : 4320,
+        lo = -limit - Math.min(...values) - origin,
         hi = limit - Math.max(...values) - origin;
       const offset =
           preferred >= lo && preferred <= hi
@@ -124,6 +186,10 @@
     unprojectPoint,
     aperturePolygon,
     contains,
+    hitLayer,
+    selectionUnits,
+    marqueeSelection,
+    alignmentDelta,
     rebasePart,
     duplicatePartMotion,
   };

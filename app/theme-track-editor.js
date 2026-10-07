@@ -2,9 +2,11 @@
 (() => {
   'use strict';
   const K = ThemeKeyframes;
+  const activeDrags = new Map();
   function mount(container, options) {
     const { owner, properties, change, live, start, end, time, seek, play } = options,
       section = document.createElement('section');
+    const stableChange = fn => { start(); live(fn); end({ fields: false }); };
     section.className = 'property-section track-editor';
     const heading = document.createElement('h3');
     heading.textContent = '属性关键帧';
@@ -102,6 +104,7 @@
     section.refreshTime = () => {
       const duration = K.duration(owner()),
         t = owner().motionLoop && duration > 0 ? time() % duration : time();
+      scrub.max = Math.max(baseDuration, duration);
       elapsed.textContent = (t / 1000).toFixed(2) + ' s';
       if (document.activeElement !== scrub) scrub.value = t;
       for (const line of section.querySelectorAll('[data-playhead]')) {
@@ -154,7 +157,7 @@
             Math.min(K.ranges[prop][1], high + span * 0.18),
           ];
         };
-      let drag = null;
+      let drag = null, refreshTable = () => {};
       function graph() {
         const track = get();
         if (!track) return;
@@ -198,12 +201,15 @@
               point = new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse);
             start();
             drag = { index: i, keys: structuredClone(track.keys), extent, last, inverse, point };
+            activeDrags.set(svg, finishDrag);
             svg.setPointerCapture(e.pointerId);
           };
         }
         el('text', { x: 16, y: 115, 'font-size': 8, fill: '#9399a3' }).textContent = '0 s';
         el('text', { x: 206, y: 115, 'font-size': 8, fill: '#9399a3' }).textContent =
           (last / 1000).toFixed(1) + ' s';
+        refreshTable();
+        block.querySelector('.segment-curve')?.refreshCurve?.();
       }
       svg.onpointerdown = (e) => {
         if (e.button !== 0 || e.target.closest('circle')) return;
@@ -233,11 +239,13 @@
         live((o) => (o.tracks.find((t) => t.property === prop).keys = keys));
         graph();
       };
-      svg.onpointerup = svg.onpointercancel = () => {
+      function finishDrag() {
+        activeDrags.delete(svg);
         if (!drag) return;
         drag = null;
         end();
-      };
+      }
+      svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = finishDrag;
       graph();
       const timing = document.createElement('details');
       timing.className = 'track-timing';
@@ -272,8 +280,10 @@
               key === 'start' ? +input.value : track.keys[0].time,
               key === 'duration' ? +input.value : track.keys.at(-1).time - track.keys[0].time,
             );
-          change((o) => (o.tracks = o.tracks.map((t) => (t.property === prop ? retimed : t))));
+          stableChange((o) => (o.tracks = o.tracks.map((t) => (t.property === prop ? retimed : t))));
           seek(retimed.keys[0].time);
+          input.value = key === 'start' ? retimed.keys[0].time : retimed.keys.at(-1).time - retimed.keys[0].time;
+          last = input.value; graph();
         };
         input.onchange = input.onblur = commit;
         input.onkeydown = (e) => {
@@ -301,8 +311,11 @@
         labels.append(label);
       }
       table.append(labels);
+      const rows = [];
       for (const [index, key] of initial.keys.entries()) {
         const row = document.createElement('div');
+        const findKey = () => get()?.keys.find(k => k.id === key.id),
+          keyIndex = () => get()?.keys.findIndex(k => k.id === key.id) ?? -1;
         const ms = document.createElement('input');
         ms.type = 'number';
         ms.value = key.time;
@@ -314,13 +327,14 @@
         const commitTime = () => {
           if (!ms.value.trim() || !Number.isFinite(+ms.value) || ms.value === savedTime) return;
           const at = Math.max(0, Math.min(30000, Math.round(+ms.value)));
-          if (get().keys.some((key, i) => i !== index && key.time === at)) {
+          if (get().keys.some(other => other.id !== key.id && other.time === at)) {
             ms.value = savedTime;
             options.toast?.('这个时刻已有关键帧。请调整现有帧，或输入不同时间。');
             return;
           }
           savedTime = String(at);
-          change((o) => (o.tracks.find((t) => t.property === prop).keys[index].time = at));
+          stableChange((o) => { const found = o.tracks.find(t => t.property === prop)?.keys.find(k => k.id === key.id); if (found) found.time = at; });
+          ms.value = savedTime; graph();
         };
         ms.onchange = ms.onblur = commitTime;
         ms.onkeydown = (e) => {
@@ -343,13 +357,14 @@
             start();
             valueEditing = true;
           }
-          live((o) => (o.tracks.find((t) => t.property === prop).keys[index].value = +value.value));
+          live((o) => { const found = o.tracks.find(t => t.property === prop)?.keys.find(k => k.id === key.id); if (found) found.value = +value.value; });
           graph();
         };
         const commitValue = () => {
           if (!valueEditing) return;
           valueEditing = false;
-          end();
+          end({ fields: false });
+          if (findKey()) value.value = +findKey().value.toFixed(3);
         };
         value.onchange = value.onblur = commitValue;
         value.onkeydown = (e) => {
@@ -378,21 +393,43 @@
         if (curve.disabled) curve.title = '最后一帧没有后续区间';
         curve.onchange = () => {
           if (curve.value === 'bezier')
-            ThemeSegmentCurve.activate((options.id || '') + ':' + prop, index);
+            ThemeSegmentCurve.activate((options.id || '') + ':' + prop, keyIndex());
           change((o) => {
-            const key = o.tracks.find((t) => t.property === prop).keys[index];
-            key.ease = curve.value;
-            if (key.ease === 'bezier') key.curve = K.normalizeCurve(key.curve);
+            const found = o.tracks.find((t) => t.property === prop).keys.find(k => k.id === key.id);
+            if (!found) return;
+            found.ease = curve.value;
+            if (found.ease === 'bezier') found.curve = K.normalizeCurve(found.curve);
           });
         };
         const del = document.createElement('button');
         del.textContent = '−';
         del.setAttribute('aria-label', '删除' + K.labels[prop] + '第 ' + (index + 1) + ' 帧');
         del.onclick = () =>
-          change((o) => o.tracks.find((t) => t.property === prop).keys.splice(index, 1));
+          change((o) => { const track = o.tracks.find(t => t.property === prop); if (track) track.keys = track.keys.filter(k => k.id !== key.id); });
         row.append(ms, value, curve, del);
         table.append(row);
+        rows.push({ row, index: keyIndex, refresh() {
+          const current = findKey(); if (!current) return;
+          const ordinal = keyIndex() + 1;
+          ms.setAttribute('aria-label', K.labels[prop] + '第 ' + ordinal + ' 帧时间毫秒');
+          value.setAttribute('aria-label', K.labels[prop] + '第 ' + ordinal + ' 帧值');
+          del.setAttribute('aria-label', '删除' + K.labels[prop] + '第 ' + ordinal + ' 帧');
+          savedTime = String(current.time);
+          if (document.activeElement !== ms) ms.value = current.time;
+          if (document.activeElement !== value) value.value = +current.value.toFixed(3);
+          curve.disabled = keyIndex() === get().keys.length - 1;
+          curve.title = curve.disabled ? '最后一帧没有后续区间' : '';
+          curve.value = current.ease;
+        } });
       }
+      refreshTable = (sort = false) => {
+        rows.forEach(item => item.refresh());
+        // Keep the edited row in place while a pointer or Tab moves to its next
+        // field. Sort this table only after focus has left it; controls survive.
+        if (sort && !table.contains(document.activeElement))
+          rows.slice().sort((a, b) => a.index() - b.index()).forEach(item => table.append(item.row));
+      };
+      table.addEventListener('focusout', () => queueMicrotask(() => { if (table.isConnected) refreshTable(true); }));
       block.append(table);
       ThemeSegmentCurve.mount(block, {
         id: (options.id || '') + ':' + prop,
@@ -434,8 +471,13 @@
   }
   window.ThemeTrackEditor = {
     mount,
+    get isInteracting() {
+      for (const surface of activeDrags.keys()) if (!surface.isConnected) activeDrags.delete(surface);
+      return activeDrags.size > 0 || !!window.ThemeSegmentCurve?.isInteracting;
+    },
     refresh(container) {
       container.querySelectorAll('.track-editor').forEach((el) => el.refreshTime?.());
     },
   };
+  window.addEventListener('blur', () => { for (const finish of [...activeDrags.values()]) finish(); });
 })();

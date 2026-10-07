@@ -22,12 +22,20 @@
       };
       const send = (frame, command, data) =>
         frame?.contentWindow?.postMessage({ channel: 'hiss-main', command, data }, location.origin);
-      function configure(v) {
+      function configure(v, force = false) {
         if (!v.ready) return;
         const d = doc(v.id);
         if (!d) return;
-        send(v.frame, 'presentation', { layout: 'custom', custom: ThemeEditorModel.custom(d) });
-        send(v.frame, 'fleet-effects', d.composition === 'feed');
+        const presentation = { layout: 'custom', custom: ThemeEditorModel.custom(d) },
+          fleet = d.composition === 'feed';
+        if (force || !ThemeDocumentCompare.same(presentation, v.presentation)) {
+          send(v.frame, 'presentation', presentation);
+          v.presentation = presentation;
+        }
+        if (force || fleet !== v.fleet) {
+          send(v.frame, 'fleet-effects', fleet);
+          v.fleet = fleet;
+        }
       }
       function scoped(key = '') {
         if (apiCache.has(key)) return apiCache.get(key);
@@ -215,6 +223,7 @@
         }
         if (command === 'presentation' || command === 'fleet-effects') return;
         for (const v of views.values()) {
+          if (command === 'clear' || command === 'source') delete v.preview;
           if (v.ready) send(v.frame, command, data);
           else {
             if (command === 'clear' || command === 'source') {
@@ -239,13 +248,21 @@
           const v = views.get(key);
           if (v) {
             if (v.ready) send(v.frame, command, data);
-            else v.preview = { command, data };
+            else if (command === 'editor-preview' || command === 'editor-demo') v.preview = { command, data };
+            else {
+              v.queue.push({ command, data: structuredClone(data) });
+              if (v.queue.length > 200) v.queue.shift();
+            }
           } else send(mainFrame, command, data);
         } else {
           send(mainFrame, command, data);
           for (const v of views.values()) {
             if (v.ready) send(v.frame, command, data);
             else if (command === 'editor-preview' || command === 'editor-demo') v.preview = { command, data };
+            else {
+              v.queue.push({ command, data: structuredClone(data) });
+              if (v.queue.length > 200) v.queue.shift();
+            }
           }
         }
       }
@@ -281,7 +298,7 @@
         if (v.ready && v.session === event.data.instance) return;
         v.ready = true;
         v.session = event.data.instance;
-        configure(v);
+        configure(v, true);
         for (const [command, data] of controls) send(v.frame, command, data);
         const pending = v.preview || pendingPreview;
         if (pending) send(v.frame, pending.command, pending.data);

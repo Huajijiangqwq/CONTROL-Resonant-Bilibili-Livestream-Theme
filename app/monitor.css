@@ -2,3 +2,40 @@
 :root .workbench{height:calc(100vh - 68px);min-height:0}.library,.inspector,.workspace{overflow:auto}.workspace{align-content:start}.workspace>.viewer,.workspace>.transport,.workspace>.shot-head,.workspace>.transport-row{flex-shrink:0}@media(max-width:900px){:root .workbench{height:auto}.library{overflow:visible}}@media(min-width:901px){.library::-webkit-scrollbar,.inspector::-webkit-scrollbar,.workspace::-webkit-scrollbar{width:6px}.library::-webkit-scrollbar-thumb,.inspector::-webkit-scrollbar-thumb,.workspace::-webkit-scrollbar-thumb{background:#404249;border-radius:3px}}
 @media(min-width:901px){.viewer{max-height:calc(100vh - 355px);min-height:210px}.shot-head{position:sticky;top:-24px;background:#151619;padding:0 0 9px;z-index:1}}
 textarea{width:100%;resize:vertical;background:#18191d;border:1px solid #3b3e46;border-radius:4px;color:#ebe9e2;padding:8px;font:inherit}
+/* Recording controls use the same restrained studio palette as the editor. */
+.monitor-workbench{background:#1a2028;color:#e6ecef;font-family:'Segoe UI','Microsoft YaHei',sans-serif;font-size:13px;--line:#3c4855;--muted:#a3adb8}
+.monitor-workbench>header{height:62px;background:#242c36;border-bottom-color:#111820;padding:0 20px}
+.monitor-workbench .workbench{height:calc(100dvh - 62px);grid-template-columns:205px minmax(0,1fr) 285px}
+.monitor-workbench.standalone .workbench{grid-template-columns:minmax(0,1fr) 285px}
+.monitor-workbench .library,.monitor-workbench .inspector{background:#222a33}
+.monitor-workbench .workspace{padding:18px 20px;gap:12px}
+.monitor-workbench .shot-head{top:-18px;background:#1a2028;padding-bottom:6px;align-items:center;flex-wrap:wrap}
+.monitor-workbench .shot-head>div:first-child{flex:1;min-width:180px}
+.monitor-workbench h1{font-size:21px;letter-spacing:0}
+.monitor-workbench button,.monitor-workbench .button{font-size:12px;padding:8px 11px;background:#2d3743;border-color:#475463}
+.monitor-workbench button:hover,.monitor-workbench .button:hover{background:#3b4a59;border-color:#718393}
+.monitor-workbench .primary{background:#e1e8ea;color:#17212a;border-color:#e1e8ea}
+.monitor-workbench :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid #a9c5d8;outline-offset:3px}
+.monitor-workbench :is(input,select,textarea){background:#19222b;border-color:#43515f;color:#e6ecef}
+.monitor-workbench input[aria-invalid=true]{border-color:#d7947e;background:#322924}
+.monitor-workbench .component{background:transparent;border-color:transparent;min-height:44px;padding:9px 8px}
+.monitor-workbench .component[aria-pressed=true]{background:#364756;border-color:#718798}
+.monitor-workbench .component .icon{color:#b7cddd;width:26px}
+.monitor-workbench .component small{font-size:10px;line-height:1.5;margin-top:3px}
+#monitorComponentSearch{margin-bottom:12px;font-size:12px}
+.monitor-component-empty{color:#a3adb8;padding:10px;font-size:12px}
+.monitor-workbench .status{border-radius:4px;background:#25372f;border-color:#405b4b;color:#bed0c6;max-width:280px;white-space:normal}
+.monitor-workbench .status[data-error=true],#monitorSaveState[data-error=true]{background:#3a292a;color:#ebaea4;border-color:#805553}
+.monitor-workbench .transport{padding:13px 15px;background:#242e38;border-color:#43515f}
+.monitor-isolation-note{margin:0;color:#a3b2c0;font-size:11px;line-height:1.5}
+.monitor-workbench .viewer{max-height:calc(100dvh - 375px);min-height:190px;border-color:#506170;box-shadow:0 7px 22px #0004}
+.monitor-workbench .instructions p{font-size:11px;max-width:800px;line-height:1.75}
+.monitor-keyboard{display:inline-block;color:#c0cdd8;margin-top:7px;font-size:11px}
+.monitor-fold-section{padding:0 0 18px;margin:0 0 18px;border-bottom:1px solid #3c4855}
+.monitor-fold-section summary{cursor:pointer;font-weight:600;font-size:13px;padding:4px 0 13px;color:#d7e0e7}
+.monitor-workbench .inspector h2{font-size:13px;margin-bottom:13px}
+.monitor-workbench .media-tools{background:#242e38;border-color:#42515f}
+.monitor-workbench .toast{background:#dae6eb;color:#17212a;max-width:min(700px,90vw);z-index:8;box-shadow:0 8px 28px #0006;line-height:1.6}
+@media(max-width:1100px) and (min-width:901px){.monitor-workbench .workbench{grid-template-columns:174px minmax(0,1fr) 260px}.monitor-workbench .workspace{padding-inline:13px}.monitor-workbench .transport-row{gap:6px}.monitor-workbench .transport-row button{padding:7px 9px}}
+@media(max-width:900px){.monitor-workbench .workbench{height:auto;grid-template-columns:minmax(0,1fr) 250px}.monitor-workbench .library{display:block;padding:10px 14px}.monitor-workbench #components{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px;max-height:145px;overflow:auto}.monitor-workbench .component{width:100%;margin:0;min-height:34px;padding:6px 8px}.monitor-workbench .component .icon{display:inline-block;width:22px;font-size:14px}.monitor-workbench .component small{display:none}#monitorComponentSearch{max-width:290px;margin-bottom:8px}.monitor-workbench .viewer{max-height:none;min-height:170px}.monitor-workbench .workspace{padding:14px 12px}.monitor-workbench .shot-head{position:static}}
+@media(max-width:640px){.monitor-workbench .workbench{display:block}.monitor-workbench>header{height:auto;min-height:62px;flex-wrap:wrap;padding:11px 14px;gap:8px}.monitor-workbench .library{border-right:0}.monitor-workbench .inspector{border-left:0;border-top:1px solid #3c4855}.monitor-workbench .viewer{min-height:150px}.monitor-workbench #components{max-height:122px;grid-template-columns:repeat(3,minmax(0,1fr))}.monitor-workbench .component{font-size:11px}.monitor-workbench .component .icon{display:none}.monitor-workbench .phases{flex-wrap:wrap;gap:5px}}

@@ -31,6 +31,8 @@ macOS 适配为本项目原创 MIT 代码：通过 Electron / Chromium 的系统
 
 audioMotion-analyzer、CAVA、MilkDrop / Butterchurn 等曾用于研究音频可视化，没有把它们的代码作为本包运行时依赖，不能把研究参考写成已集成的功能。
 
+图层样式的功能分类参考 Adobe Photoshop 的[图层效果与样式说明](https://helpx.adobe.com/uk/photoshop/desktop/create-manage-layers/apply-layer-effects/layer-style-effects-and-options-overview.html)。本项目自行实现适用于直播主题的渲染和控件，不包含 Photoshop 程序、素材或源码；支持范围以本项目界面为准。
+
 游戏美术和商标不适用本项目 MIT。具体替换及未分发的素材见 [素材与许可](docs/素材与许可.md)。
 
 主题保留 CONTROL RESONANT 官方中英文 Logo（`app/live-logo-en.png` / `live-logo-zh.png`）及用户提供参考录像中的 FBC 标志画面（`app/fbc-reference-frame.png`）。原图权利属于 Remedy 等原权利方；项目不将这些文件标为原创、AI 生成或 CC BY 4.0 素材。[游戏官方页面](https://www.remedygames.com/games/control-2)。
@@ -57,4 +59,3 @@ audioMotion-analyzer、CAVA、MilkDrop / Butterchurn 等曾用于研究音频可
 
 - 二维码编码使用 [Kazuhiko Arase / qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator)，固定提交 `83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8`，本地文件 `app/qr-code-generator.js`，MIT，见 [许可全文](licenses/qrcode-generator-MIT.txt)。不会调用第三方在线二维码生成服务。
 - 登录流程由本项目实现，使用 Bilibili 网页二维码登录端点；新版跨域回调行为参考 [public-clis/bilibili-cli 的维护者修复说明](https://github.com/public-clis/bilibili-cli/pull/27)。没有打包该项目源码。网页接口不是直播开放平台的正式身份码 API，兼容性可能随平台变化。
-- 暂未开放的身份码实验代码参考 [Bilibili 官方 OpenLive C# 示例](https://github.com/bilibili-openplatform/OpenLive_CSharpDemo) 的协议与字段，并未打包其源码。

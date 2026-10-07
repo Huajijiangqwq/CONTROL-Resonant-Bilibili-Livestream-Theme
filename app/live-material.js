@@ -8,7 +8,7 @@
     tiles = [],
     params = new URLSearchParams(location.search),
     storageKey = 'hiss-main-material-v1',
-    obs = params.has('obs') || scene.dataset.materialPreview === 'true';
+    obs = (window.LiveState ? !LiveState.storesPreset(params, new URLSearchParams(location.hash.slice(1))) : params.has('obs')) || scene.dataset.materialPreview === 'true';
   const normalize = (value) =>
     value !== null && String(value).trim() !== '' && Number.isFinite(Number(value))
       ? Math.max(0, Math.min(100, Math.round(Number(value))))

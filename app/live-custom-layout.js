@@ -6,7 +6,7 @@
     C = CustomLayoutConfig,
     key = 'hiss-custom-layout-v1',
     params = new URLSearchParams(location.search),
-    obs = params.has('obs');
+    obs = !LiveState.storesPreset(params, new URLSearchParams(location.hash.slice(1)));
   let raw = {};
   try {
     raw = JSON.parse(

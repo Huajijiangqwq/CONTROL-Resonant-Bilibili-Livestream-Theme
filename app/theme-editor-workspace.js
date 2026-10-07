@@ -23,6 +23,10 @@
       clamp = (v, min, max) => Math.max(min, Math.min(max, v));
     let drag = null;
     function defaults() {
+      if (body.classList.contains('editor-studio'))
+        return innerWidth <= 900 ? { assets: 200, inspector: 280, canvas: 280 }
+          : innerWidth <= 1250 ? { assets: 208, inspector: 320, canvas: 280 }
+          : { assets: 236, inspector: 320, canvas: 300 };
       return innerWidth <= 1000
         ? { assets: 140, inspector: 220, canvas: 360 }
         : innerWidth <= 1250
@@ -38,7 +42,7 @@
             : hidden
               ? 0
               : assets.getBoundingClientRect().width,
-        min = type === 'assets' ? 140 : 220;
+        min = type === 'assets' ? body.classList.contains('editor-studio') ? 200 : 140 : 220;
       return {
         min,
         max: Math.max(
@@ -70,7 +74,10 @@
           handles[type].setAttribute('aria-valuenow', Math.round(width));
         }
       }
-      if (Number.isFinite(prefs.vertical))
+      const splitInspector = inspector.contains(document.querySelector('.layers-panel'));
+      if (divider) { divider.hidden = !splitInspector; divider.tabIndex = splitInspector ? 0 : -1; }
+      if (!splitInspector) properties.style.height = '100%';
+      else if (Number.isFinite(prefs.vertical))
         properties.style.height =
           clamp(prefs.vertical * inspector.clientHeight, 190, inspector.clientHeight - 130) + 'px';
     }
@@ -81,7 +88,7 @@
       save();
     }
     for (const [type, el, name] of [
-      ['assets', assets, '素材栏'],
+      ['assets', assets, '左侧栏'],
       ['inspector', inspector, '属性栏'],
     ]) {
       const handle = document.createElement('div');
@@ -154,6 +161,7 @@
     window.addEventListener('resize', apply);
     window.addEventListener('blur', finish);
     new MutationObserver(apply).observe(body, { attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(apply).observe(inspector, { childList: true });
     apply();
   }
   window.ThemeEditorWorkspace = { install };

@@ -3,12 +3,15 @@
   'use strict';
   const panel = document.getElementById('obsInstallPanel');
   if (!panel) return;
+  const legacy = document.createElement('details');
+  const summary = document.createElement('summary'); summary.textContent = '高级：旧版场景直接跟随草稿'; legacy.append(summary);
   const el = document.createElement('section');
   el.className = 'obs-live-panel';
-  el.innerHTML = `<div class="obs-section-title"><h3>实时布局同步</h3><span id="obsSyncBadge">未绑定</span></div><p class="obs-note">绑定一次后，位置、尺寸、文字和特效参数会随编辑更新。切换预设时，游戏区域和主题一起过渡。</p><label>已有主题场景<select id="obsSyncTarget" aria-label="实时同步目标"><option value="">正在读取…</option></select></label><div class="obs-live-actions"><button id="obsSyncBind" type="button">绑定并开启实时同步</button><button id="obsSyncPause" type="button" hidden>暂停同步</button><button id="obsSyncResume" type="button" hidden>恢复同步</button></div><p id="obsSyncDetail" class="obs-note" role="status">新建场景后会自动开启同步；也可以选择已有主题场景。</p><p class="obs-note">旧场景首次绑定会初始化一次主题来源，之后修改无需刷新。</p>`;
-  panel.append(el);
+  el.innerHTML = `<div class="obs-section-title"><h3>实时布局同步</h3><span id="obsSyncBadge">未绑定</span></div><p class="obs-note">绑定一次后，位置、尺寸、文字和特效参数会随编辑更新。切换预设时，游戏区域和主题一起过渡。</p><label>已有主题场景<select id="obsSyncTarget" aria-label="实时同步目标"><option value="">正在读取…</option></select></label><div class="obs-live-actions"><button id="obsSyncBind" type="button">绑定并开启实时同步</button><button id="obsSyncPause" type="button" hidden>暂停同步</button><button id="obsSyncResume" type="button" hidden>恢复同步</button></div><p id="obsSyncDetail" class="obs-note" role="status">新建场景保持创建时的画面；需要随编辑变化时，请选择场景并明确开启同步。</p><p class="obs-note">旧场景首次绑定会初始化一次主题来源，之后修改无需刷新。</p>`;
+  legacy.append(el); panel.append(legacy);
   const $ = (id) => document.getElementById(id),
     key = 'theme-obs-live-' + location.pathname;
+  const sameDocument = window.ThemeDocumentCompare?.same || ((a, b) => JSON.stringify(a) === JSON.stringify(b));
   let saved = {};
   try {
     saved = JSON.parse(sessionStorage.getItem(key) || '{}');
@@ -21,9 +24,10 @@
     pending = null,
     inflight = null,
     timer = 0,
-    lastSent = '',
+    lastSent = null,
     loading = false,
     available = false;
+  let safetyGeneration = 0;
   function store() {
     sessionStorage.setItem(
       key,
@@ -65,6 +69,7 @@
         d.layers.find((l) => l.type === 'chat' && l.id === $('chatInstancePicker')?.value) ||
         d.layers.find((l) => l.type === 'chat');
     return {
+      messageChannel: location.pathname.endsWith('chat-editor.html') ? 'chat' : 'theme',
       source: $('obsGameSource').disabled ? '' : $('obsGameSource').value,
       output: $('obsChatOutput').value,
       chatId: chat?.id,
@@ -96,15 +101,22 @@
   }
   async function bind(target) {
     if (loading) return;
+    const startingGeneration = safetyGeneration;
     loading = true;
     show('正在绑定场景…');
     try {
       await settle();
       const d = structuredClone(doc());
       binding = await request('bind', { ...choices(), ...target, writer, document: d });
+      if (startingGeneration !== safetyGeneration) {
+        wants = false;
+        binding = await request('pause-sync', { id: binding.id, writer });
+        store(); show('主题已切换，本次绑定保持暂停。', '已暂停'); return;
+      }
+      window.dispatchEvent(new Event('obs-layout-sync-started'));
       sequence = 0;
       wants = true;
-      lastSent = JSON.stringify(d);
+      lastSent = d;
       store();
       await refreshTargets();
       show('正在实时更新：' + binding.sceneName, '实时同步已开启');
@@ -124,18 +136,21 @@
     if (inflight || !pending || !binding?.enabled || loading) return;
     const item = pending;
     pending = null;
-    if (item.text === lastSent) return;
+    // Queue only a reference; take a structural snapshot at the actual send.
+    // Embedded media strings are shared instead of stringify/parse per frame.
+    const document = ThemeEditorModel.normalize(item.document);
+    if (sameDocument(document, lastSent)) return;
     inflight = request('sync', {
       id: binding.id,
       writer,
       sequence: ++sequence,
-      document: item.document,
+      document,
       duration: item.duration,
     });
     try {
       const info = await inflight;
       binding = { ...binding, ...info };
-      lastSent = item.text;
+      lastSent = document;
       show('已同步到：' + binding.sceneName, '实时同步已开启');
     } catch (e) {
       failure(e);
@@ -146,8 +161,7 @@
   }
   function queue(value, duration) {
     if (!binding?.enabled || !wants) return;
-    const text = JSON.stringify(value);
-    pending = { document: JSON.parse(text), text, duration: duration || 0 };
+    pending = { document: value, duration: duration || 0 };
     if (!timer && !inflight) timer = setTimeout(flush, 70);
   }
   async function settle() {
@@ -184,12 +198,17 @@
   $('obsSyncResume').onclick = () => bind({ id: binding.id }).catch(() => {});
   window.ThemeObsLive = {
     pause,
+    get enabled() { return !!binding?.enabled; },
     bindInstalled: async (result) =>
       bind({ sceneName: result.sceneName, inputName: result.inputName }),
   };
   window.addEventListener('theme-document-change', (e) =>
     queue(e.detail.document, e.detail.duration),
   );
+  window.addEventListener('theme-document-switch', () => {
+    safetyGeneration++; wants = false; pending = null; clearTimeout(timer); timer = 0;
+    pause().catch(failure);
+  });
   window.addEventListener('obs-connected', async () => {
     available = true;
     try {

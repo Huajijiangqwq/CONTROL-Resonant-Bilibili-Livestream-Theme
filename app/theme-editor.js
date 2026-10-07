@@ -2,7 +2,8 @@
   'use strict';
   const M = ThemeEditorModel,
     $ = (id) => document.getElementById(id),
-    key = 'hiss-theme-editor-v92' + (new URLSearchParams(location.search).has('qa') ? '-qa' : ''),
+    key = ThemeDraftLoader.keys(new URLSearchParams(location.search).has('qa')).key,
+    previousKey = ThemeDraftLoader.keys(new URLSearchParams(location.search).has('qa')).previousKey,
     legacyKey =
       'hiss-theme-editor-v76' + (new URLSearchParams(location.search).has('qa') ? '-qa' : ''),
     snapKey = key + '-snapshots',
@@ -84,10 +85,12 @@
     return svg;
   }
   document.querySelectorAll('[data-icon]').forEach((n) => n.append(icon(n.dataset.icon)));
-  let stored, initialDraft;
+  let stored, initialDraft, migratedDraft = false;
   try {
-    initialDraft = await ThemeEditorStorage.draft(key);
-    stored = initialDraft?.document || (await ThemeEditorStorage.get(legacyKey));
+    const loadedDraft = await ThemeDraftLoader.load(ThemeEditorStorage, localStorage, new URLSearchParams(location.search).has('qa'));
+    initialDraft = loadedDraft.initial;
+    stored = loadedDraft.document;
+    migratedDraft = loadedDraft.migrated;
   } catch {}
   let project;
   try {
@@ -120,8 +123,8 @@
   } catch {
     project = M.create('classic');
   }
-  function chatSlots(doc) {
-    return doc.layers.some((l) => l.type === 'chat')
+  function chatSlots(doc, primary = false) {
+    return doc.layers.some((l) => l.type === 'chat' && (!primary || !l.standalone))
       ? 0
       : 1 +
           ['chat-border', 'chat-title', 'chat-rule'].filter(
@@ -147,10 +150,27 @@
     toast('当前组件已达 ' + M.limits.parts + ' 个部件；请先删除不需要的自定义部件。');
     return false;
   }
-  function ensureChatContainer(doc, point, show = false) {
-    let chat = doc.layers.find((l) => l.type === 'chat');
+  function roomForDocument(candidate, { allowReduction = false } = {}) {
+    const validation = window.ThemeDocumentValidation;
+    if (!validation?.capacityIssue || !validation?.jsonBytes) {
+      toast('主题容量检查尚未准备好，请刷新编辑器后重试。'); return false;
+    }
+    const mediaIssue = M.capacityIssue(candidate) || validation.mediaIssue(candidate, M);
+    if (mediaIssue) { toast(mediaIssue); return false; }
+    const normalized = M.normalize(candidate), issue = validation.capacityIssue(normalized, M);
+    if (!issue) return true;
+    if (allowReduction && validation.jsonBytes(normalized, M, Number.MAX_SAFE_INTEGER) < validation.jsonBytes(project, M, Number.MAX_SAFE_INTEGER)) return true;
+    toast(issue + ' 当前画布未改变。'); return false;
+  }
+  function withComponentParts(layerId, parts, variant = activeVariant[layerId] || '') {
+    return { ...project, layers: project.layers.map(layer => layer.id !== layerId ? layer : variant
+      ? { ...layer, variants: { ...layer.variants, [variant]: { ...layer.variants[variant], parts } } }
+      : { ...layer, parts }) };
+  }
+  function ensureChatContainer(doc, point, show = false, primary = false) {
+    let chat = primary ? ThemeInstances.primaryChat(doc) : doc.layers.find((l) => l.type === 'chat');
     const fresh = !chat;
-    if (fresh && doc.layers.length + chatSlots(doc) > M.limits.layers) return null;
+    if (fresh && doc.layers.length + chatSlots(doc, primary) > M.limits.layers) return null;
     if (fresh) {
       const template = M.create('classic'),
         base = template.layers.find((l) => l.type === 'chat');
@@ -178,8 +198,8 @@
         else doc.layers.push({ ...child, ...placement });
       }
     } else if (point) {
-      chat.x = M.num(point.x, 0, 1920 - chat.w, chat.x);
-      chat.y = M.num(point.y, 0, 1080 - chat.h, chat.y);
+      chat.x = M.num(point.x, ...M.positionRange(chat, 'x'), chat.x);
+      chat.y = M.num(point.y, ...M.positionRange(chat, 'y'), chat.y);
     }
     if (show) chat.visible = true;
     return chat;
@@ -202,7 +222,7 @@
       ...doc,
       layers: [
         ...doc.layers,
-        ...project.layers.filter((l) => l.standalone && !doc.layers.some((x) => x.id === l.id)),
+        ...project.layers.filter((l) => componentTypes.includes(l.type) && l.standalone && !doc.layers.some((x) => x.id === l.id)),
       ],
     };
   };
@@ -220,7 +240,7 @@
     openGroups = new Set(),
     sectionState = new Map();
   let layerQuery = '',
-    propertyTab = 'all';
+    propertyTab = 'layout';
   const undoStore = ThemeEditorHistory.create(60);
   let documentEpoch = 0,
     gestureView = null;
@@ -235,10 +255,10 @@
     renderPending = false,
     saveTimer,
     toastTimer,
-    category = 'all',
+    category = 'theme',
     paused = false,
     dragLayer = null,
-    inlineId = null;
+    inlineId = null, curveSession = null;
   function styleLayer(l) {
     if (!l) return l;
     const key = activeVariant[l.id],
@@ -285,7 +305,7 @@
       project.settings[id] = source.type === 'checkbox' ? source.checked : source.value;
   }
   function checkpoint() {
-    undoStore.checkpoint(project);
+    undoStore.checkpoint(project, { selected: [...selected], part: selectedPart, variants: { ...activeVariant } });
     syncUndo();
   }
   function syncUndo() {
@@ -308,7 +328,9 @@
     syncNotice.hidden = false;
     syncNotice.replaceChildren();
     const text = document.createElement('span');
-    text.textContent = items.some((c) => c.reason === 'capacity')
+    text.textContent = items.some((c) => c.reason === 'reset')
+      ? '共享草稿已重建。本页修改与另一版均已保存在恢复稿中，请选择要继续使用的版本。'
+      : items.some((c) => c.reason === 'capacity')
       ? '两页新增内容合并后超过容量。请选择保留哪一页的该组图层或部件；双方版本已留在文件菜单的恢复稿中。'
       : '另一编辑器也修改了 ' + items.length + ' 处相同参数。当前修改已留在文件菜单的恢复稿中。';
     syncNotice.append(text);
@@ -326,8 +348,28 @@
     key,
     initial: initialDraft,
     base: syncBase,
-    get: () => project,
+    get() {
+      // Inline text is already visible to the user before blur commits it. Keep
+      // that text in recovery drafts and three-way merges as well.
+      if (!inlineId) return project;
+      const value = structuredClone(project), layer = value.layers.find(item => item.id === inlineId);
+      if (layer) layer.text = $('inlineText').value;
+      return value;
+    },
+    busy() {
+      if (gesture || partGesture || effectGesture || window.ThemeEditor?.isInteracting || window.ThemeMediaCropUI?.isInteracting || window.ThemeTrackEditor?.isInteracting) return true;
+      return document.hasFocus() && (!!inlineId || !!document.activeElement?.closest('input,textarea,select,[contenteditable=true]'));
+    },
     apply(value) {
+      // Remote changes end stale pointer/field sessions without rolling back
+      // local movement that was already included in the merge.
+      stopEdgePan(); gesture = null; partGesture = null; effectGesture = null; gestureView = null;
+      if (inlineId) {
+        const layer = project.layers.find(item => item.id === inlineId);
+        if (layer && layer.text !== $('inlineText').value) { checkpoint(); layer.text = $('inlineText').value; undoStore.commit(project); }
+        inlineId = null; $('inlineText').hidden = true;
+      }
+      documentEpoch++;
       checkpoint();
       project = M.normalize(value);
       resetAttachments();
@@ -398,19 +440,29 @@
     update();
   }
   function undo(redo = false) {
-    const previous = undoStore.undo(project, redo);
+    const previous = undoStore.undo(project, redo, { selected: [...selected], part: selectedPart, variants: { ...activeVariant } });
     if (!previous) {
       syncUndo();
       return;
     }
     documentEpoch++;
     project = M.normalize(previous);
+    const restored = undoStore.uiState;
+    if (restored) {
+      selected = new Set(restored.selected || []); selectedPart = restored.part || null;
+      for (const id of Object.keys(activeVariant)) delete activeVariant[id];
+      Object.assign(activeVariant, restored.variants || {});
+      for (const id of selected) {
+        const layer = project.layers.find(l => l.id === id);
+        if (layer?.parent) openGroups.add(layer.parent);
+      }
+    }
     resetAttachments();
     update();
   }
   function select(ids) {
     if (project.layers.find((l) => l.id === ids[0])?.type !== selectedLayers()[0]?.type)
-      propertyTab = 'all';
+      propertyTab = 'layout';
     selectedPart = null;
     for (const id of ids) {
       const l = project.layers.find((x) => x.id === id);
@@ -442,7 +494,6 @@
       const id = 'group-' + Date.now().toString(36),
         r = M.bounds(items),
         g = M.layer({ id, type: 'group', name: '新图层组', ...r });
-      project.layers.push(g);
       for (const l of items) {
         const visual = M.effective(project, l);
         Object.assign(l, {
@@ -452,9 +503,8 @@
           parent: id,
         });
       }
-      project.layers = project.layers.filter(
-        (l) => l.type !== 'group' || l.id === id || project.layers.some((c) => c.parent === l.id),
-      );
+      project.layers = M.stackGroup(project.layers, chosen, g);
+      openGroups.add(id);
       selected = new Set([id]);
     });
   }
@@ -503,12 +553,13 @@
       duplicatePart();
       return;
     }
-    const source = expanded().filter((l) => l.type !== 'group'),
+    const source = expanded(),
       result = ThemeInstances.clone(project, source, () => 'layer-' + crypto.randomUUID());
     if (!source.length || !roomForLayers(result.items.length)) return;
+    if (!roomForDocument({ ...project, layers: [...project.layers, ...result.items] })) return;
     transact(() => {
       project.layers.push(...result.items);
-      selected = new Set(result.selection);
+      selected = new Set(result.selection.filter((_, index) => selected.has(source[index].id)));
     });
   }
 
@@ -518,15 +569,7 @@
       return;
     }
     transact(() => {
-      const ids = new Set(expanded().map((l) => l.id));
-      if (direction > 0) {
-        for (let i = project.layers.length - 2; i >= 0; i--)
-          if (ids.has(project.layers[i].id) && !ids.has(project.layers[i + 1].id))
-            [project.layers[i], project.layers[i + 1]] = [project.layers[i + 1], project.layers[i]];
-      } else
-        for (let i = 1; i < project.layers.length; i++)
-          if (ids.has(project.layers[i].id) && !ids.has(project.layers[i - 1].id))
-            [project.layers[i], project.layers[i - 1]] = [project.layers[i - 1], project.layers[i]];
+      project.layers = M.orderLayers(project.layers, selected, direction);
     });
   }
   function toggle(prop) {
@@ -537,7 +580,47 @@
       items.forEach((l) => (l[prop] = target));
     });
   }
+  function insertionPoint(w = 400, h = 240) {
+    const area = $('canvasArea').getBoundingClientRect(), view = viewport(),
+      pose = ThemeCanvasWorkspace.camera(area, view, zoom, pan),
+      visible = { x: view.x + (22 - pose.x) / scale, y: view.y + (22 - pose.y) / scale,
+        w: (area.width - 22) / scale, h: (area.height - 22) / scale },
+      left = Math.max(view.x, visible.x), top = Math.max(view.y, visible.y),
+      right = Math.min(view.x + view.w, visible.x + visible.w),
+      bottom = Math.min(view.y + view.h, visible.y + visible.h);
+    if (right > left && bottom > top)
+      return { x: M.num((left + right - w) / 2, view.x, Math.max(view.x, view.x + view.w - w), view.x),
+        y: M.num((top + bottom - h) / 2, view.y, Math.max(view.y, view.y + view.h - h), view.y) };
+    return { x: visible.x + (visible.w - w) / 2, y: visible.y + (visible.h - h) / 2 };
+  }
+  let copiedLayerText = '', pastedLayerText = '', pasteCount = 0;
+  async function copyLayers() {
+    if (selectedPart) { toast('当前选中内部部件，可用“复制部件”或 Ctrl/Cmd D；复制整个组件请先选择图层。'); return; }
+    try {
+      const text = ThemeLayerClipboard.encode(project, selected);
+      copiedLayerText = text; pastedLayerText = ''; pasteCount = 0;
+      try { await navigator.clipboard.writeText(text); toast('图层已复制，可粘贴到本页或其他项目。'); }
+      catch { toast('已复制到本页剪贴板；浏览器未允许系统剪贴板，可在本页切换项目后粘贴。'); }
+    } catch (error) { toast(error.message); }
+  }
+  async function pasteLayers() {
+    const epoch = documentEpoch;
+    try {
+      let text;
+      try { text = await navigator.clipboard.readText(); }
+      catch { if (!copiedLayerText) throw Error('浏览器未允许读取剪贴板，请先在本页复制图层。'); text = copiedLayerText; }
+      if (epoch !== documentEpoch) { toast('主题已切换，本次粘贴未写入。'); return; }
+      const count = text === pastedLayerText ? pasteCount + 1 : 1,
+        result = ThemeLayerClipboard.paste(project, text, { id: () => 'layer-' + crypto.randomUUID(), offset: 24 * Math.min(12, count) });
+      if (!roomForDocument({ ...project, layers: [...project.layers, ...result.items] })) return;
+      transact(() => { project.layers.push(...result.items); selected = new Set(result.selection); selectedPart = null; });
+      pastedLayerText = text; pasteCount = count;
+      if (layerQuery) { layerQuery = ''; $('layerSearch').value = ''; layersUI(); }
+      toast('已粘贴 ' + result.items.length + ' 个图层；位置关系、裁剪和效果均保留。');
+    } catch (error) { toast(error.message || '图层粘贴失败，当前画布未改变。'); }
+  }
   function add(type, point) {
+    if (['image', 'video'].includes(type)) { openAssetPicker(null, { type, point }); return; }
     const existing = project.layers.find((l) => l.type === type);
     if (M.builtin.includes(type) && existing) {
       const result = ThemeInstances.clone(
@@ -546,10 +629,12 @@
         () => 'layer-' + crypto.randomUUID(),
       );
       if (!roomForLayers(result.items.length)) return;
+      if (!roomForDocument({ ...project, layers: [...project.layers, ...result.items] })) return;
       transact(() => {
         const root = result.items.find((l) => l.id === result.selection[0]),
-          dx = point ? point.x - root.x : 0,
-          dy = point ? point.y - root.y : 0;
+          at = point || insertionPoint(root.w, root.h),
+          dx = at.x - root.x,
+          dy = at.y - root.y;
         for (const l of result.items) {
           l.x += dx;
           l.y += dy;
@@ -562,17 +647,16 @@
     }
     if (type === 'chat') {
       if (!roomForLayers(chatSlots(project))) return;
+      const candidate = M.normalize(project), chat = ensureChatContainer(candidate, point, true);
+      if (!chat) return;
+      chat.locked = false;
+      if (!chatMode) candidate.composition = 'feed';
+      if (!roomForDocument(candidate)) return;
       transact(() => {
-        const chat = ensureChatContainer(project, point, true);
-        chat.locked = false;
-        if (!chatMode) project.composition = 'feed';
+        Object.assign(project, candidate);
         selected = new Set([chat.id]);
       });
       return;
-    }
-    if (chatMode && !point && !M.builtin.includes(type)) {
-      const v = viewport();
-      point = { x: v.x + 24, y: v.y + v.h * 0.4 };
     }
     if (!roomForLayers(1)) return;
     transact(() => {
@@ -628,6 +712,8 @@
           }
         }
       }
+      if (!point) Object.assign(l, insertionPoint(l.w, l.h));
+      if (!roomForDocument({ ...project, layers: [...project.layers, l] })) return;
       project.layers.push(l);
       selected = new Set([l.id]);
     });
@@ -720,9 +806,9 @@
       )
         continue;
       if (
-        (category === 'theme' && !M.builtin.includes(type)) ||
-        (category === 'basic' && M.builtin.includes(type)) ||
-        !M.labels[type].toLowerCase().includes($('assetSearch').value.toLowerCase())
+        (!$('assetSearch').value.trim() && category === 'theme' && ['text', 'image', 'video', 'shape', 'line', 'hiss'].includes(type)) ||
+        (!$('assetSearch').value.trim() && category === 'basic' && !['text', 'image', 'video', 'shape', 'line', 'border', 'background'].includes(type)) ||
+        !M.labels[type].toLowerCase().includes($('assetSearch').value.trim().toLowerCase())
       )
         continue;
       const b = document.createElement('button');
@@ -749,7 +835,10 @@
   }
   function layersUI() {
     const list = $('layers');
+    const restoreTreeFocus = window.ThemeLayerNavigation?.capture(list) || '';
     list.replaceChildren();
+    const matches = M.matchingLayers(project.layers, layerQuery),
+      belongs = item => componentTypes.includes(item.type) && item.standalone || item.id === viewport().id || ThemeInstances.owner(project, item)?.id === viewport().id;
     const roots = [...project.layers].reverse().filter((l) => !l.parent),
       ordered = roots.flatMap((l) => [
         l,
@@ -759,23 +848,23 @@
       const l = styleLayer(base);
       if (
         chatMode &&
-        !l.standalone &&
-        l.id !== viewport().id &&
-        ThemeInstances.owner(project, l)?.id !== viewport().id
+        !belongs(l) && !(l.type === 'group' && project.layers.some(child => child.parent === l.id && belongs(child)))
       )
         continue;
       if (l.parent && !openGroups.has(l.parent) && !layerQuery) continue;
       const match = l.name.toLowerCase().includes(layerQuery),
         partMatch = l.parts?.some((p) => p.name.toLowerCase().includes(layerQuery));
-      if (layerQuery && !match && !partMatch) continue;
+      if (!matches.has(l.id)) continue;
       const eff = M.effective(project, l),
         row = document.createElement('div');
       row.className = 'layer-row' + (l.parent ? ' child' : '') + (!eff.visible ? ' dim' : '');
       row.dataset.layer = l.id;
+      row.dataset.treeKey = l.id;
+      row.dataset.treeParent = l.parent || '';
       row.role = 'option';
       row.setAttribute('aria-selected', selected.has(l.id));
       row.setAttribute('aria-label', l.name);
-      row.draggable = true;
+      row.draggable = !eff.locked;
       row.tabIndex = 0;
       const mark = document.createElement('span');
       mark.className = 'layer-icon';
@@ -785,11 +874,15 @@
       name.textContent = l.name;
       if (l.parts?.length || l.type === 'group') {
         const toggle = document.createElement('button'),
-          opened = (l.type === 'group' ? openGroups : openParts).has(l.id);
+          opened = (l.type === 'group' ? openGroups : openParts).has(l.id) || !!layerQuery;
         toggle.className = 'tree-toggle';
         toggle.textContent = opened ? '⌄' : '›';
         toggle.setAttribute('aria-label', (opened ? '折叠' : '展开') + ' ' + l.name);
         toggle.setAttribute('aria-expanded', opened);
+        if (layerQuery && l.type === 'group') {
+          toggle.disabled = true;
+          toggle.title = '搜索中显示匹配图层及所属组；清空搜索后可折叠。';
+        }
         toggle.onclick = (e) => {
           e.stopPropagation();
           const set = l.type === 'group' ? openGroups : openParts;
@@ -821,7 +914,7 @@
         row.append(b);
       }
       row.onclick = (e) => {
-        const next = e.shiftKey || e.ctrlKey ? new Set(selected) : new Set();
+        const next = e.shiftKey || e.ctrlKey || e.metaKey ? new Set(selected) : new Set();
         if (next.has(l.id)) next.delete(l.id);
         else next.add(l.id);
         select([...next]);
@@ -830,10 +923,8 @@
         select([l.id]);
         $('propertyFields').querySelector('[data-prop=name]')?.focus();
       };
-      row.onkeydown = (e) => {
-        if (e.key === 'Enter') row.click();
-      };
       row.ondragstart = (e) => {
+        if (eff.locked) { e.preventDefault(); return; }
         dragLayer = l.id;
         e.dataTransfer.setData('text/x-control-layer', l.id);
       };
@@ -848,15 +939,10 @@
         const id = e.dataTransfer.getData('text/x-control-layer');
         if (id && id !== l.id)
           transact(() => {
-            const block = project.layers.filter((x) => x.id === id || x.parent === id);
-            if (!block.length || block.some((x) => x.id === l.id)) return;
-            const ids = new Set(block.map((x) => x.id));
-            project.layers = project.layers.filter((x) => !ids.has(x.id));
-            let at = -1;
-            project.layers.forEach((x, i) => {
-              if (x.id === l.id || x.parent === l.id) at = i;
-            });
-            project.layers.splice(at + 1, 0, ...block);
+            project.layers = M.dropLayer(project.layers, id, l.id);
+            const moved = project.layers.find(item => item.id === id);
+            if (moved?.parent) openGroups.add(moved.parent);
+            selected = new Set([id]);
           });
       };
       row.oncontextmenu = (e) => {
@@ -867,6 +953,34 @@
       list.append(row);
       if (l.parts?.length && (openParts.has(l.id) || (layerQuery && partMatch))) partRows(list, l);
     }
+    if (!list.childElementCount && layerQuery) {
+      const empty = document.createElement('p'); empty.className = 'property-note';
+      empty.textContent = '没有匹配的图层或部件。';
+      const clear = document.createElement('button'); clear.textContent = '清空搜索';
+      clear.onclick = () => { layerQuery = ''; $('layerSearch').value = ''; layersUI(); };
+      list.append(empty, clear);
+    }
+    const activateTreeRow = (row, options = {}) => {
+      const owner = row.dataset.layer || row.dataset.owner;
+      if (row.dataset.part) { choosePart(owner, row.dataset.part); return; }
+      const next = options.extend || options.toggle ? new Set(selected) : new Set();
+      if (options.toggle && next.has(owner)) next.delete(owner); else next.add(owner);
+      select([...next]);
+    };
+    window.ThemeLayerNavigation?.refresh(list, {
+      restoreKey: restoreTreeFocus,
+      selectedKeys: selectedPart ? [[...selected][0] + ':' + selectedPart] : [...selected],
+      activate: activateTreeRow,
+      rename(row) {
+        activateTreeRow(row); ThemePropertySearch.clear(); propertyTab = 'layout'; propertiesUI();
+        const field = $('propertyFields').querySelector(row.dataset.part ? '[data-part-prop=name]' : '[data-prop=name]');
+        const section = field?.closest('.property-section');
+        section?.classList.remove('section-closed'); section?.querySelector('.section-toggle')?.setAttribute('aria-expanded', 'true');
+        field?.focus(); field?.select();
+      },
+      menu(row) { const rect = row.getBoundingClientRect(); activateTreeRow(row); context(rect.left + 18, rect.top + 18); },
+      leave() { hitArea.focus({ preventScroll: true }); },
+    });
   }
   function field(
     container,
@@ -943,6 +1057,11 @@
             : input.value,
       );
       if (type === 'number' && (!input.value.trim() || !Number.isFinite(v))) return;
+      if (!setting && key === 'src') {
+        const ids = new Set(propertyTargets(key).map(l => l.id));
+        const candidate = { ...project, layers: project.layers.map(l => ids.has(l.id) ? { ...l, src: v } : l) };
+        if (!roomForDocument(candidate, { allowReduction: true })) return;
+      }
       if (setting) project.settings[key] = v;
       else
         for (const l of propertyTargets(key)) {
@@ -951,7 +1070,7 @@
               (x) => x.parent === l.id && !M.effective(project, x).locked,
             );
             if (key === 'x' || key === 'y') {
-              const d = v - l[key];
+              const d = ThemeCanvasWorkspace.commonDelta(children, key, v - l[key], M.positionRange);
               for (const child of children) child[key] += d;
             }
             if (key === 'w' || key === 'h') {
@@ -984,6 +1103,9 @@
             }
           }
           setAnimated(l, key, v, l);
+          if (key === 'aspectLocked' && v && M.supportsAspect(l.type)) l.aspectRatio = l.w / Math.max(2, l.h);
+          if (['w', 'h'].includes(key) && l.aspectLocked && M.supportsAspect(l.type))
+            Object.assign(l, M.resizeAspect(l, key, v));
           if (['game', 'music'].includes(l.type) && key === 'h')
             l.w = v * (l.type === 'game' ? 16 / 9 : 24 / 7);
         }
@@ -996,7 +1118,18 @@
     input.addEventListener('change', () => {
       commit();
       dirty = false;
-      if (!['text', 'name', 'src'].includes(key)) propertiesUI();
+      // Numeric blur happens before the next control's click. Rebuilding this
+      // panel here used to remove that control before pointerup, losing clicks
+      // and keyboard Tab focus. Only structural choices need a new panel.
+      if (type === 'select' || type === 'checkbox') propertiesUI();
+      else if (!setting && ['number', 'range', 'color'].includes(type)) {
+        for (const peer of $('propertyFields').querySelectorAll('[data-prop]')) {
+          if (!['number', 'range', 'color'].includes(peer.type) || peer === document.activeElement && peer !== input) continue;
+          const targets = propertyTargets(peer.dataset.prop), values = targets.map(l => l[peer.dataset.prop]);
+          if (values.length && values.every(v => v === values[0]))
+            peer.value = typeof values[0] === 'number' ? +values[0].toFixed(3) : values[0] ?? '';
+        }
+      }
     });
     return input;
   }
@@ -1006,6 +1139,7 @@
   }
   function renderPropertiesUI() {
     buildPropertiesUI();
+    window.ThemeMediaCropUI?.prune();
     ThemePropertyInputs.decorate($('propertyFields'));
     const root = $('propertyFields'),
       l = selectedLayers()[0];
@@ -1013,7 +1147,29 @@
       ThemePropertySearch.reset();
       return;
     }
-    if (selectedLayers().length === 1) mountPropertyMotion(root, l);
+    if (selectedLayers().length === 1) {
+      mountPropertyMotion(root, l);
+      if (!selectedPart && window.ThemeMediaCropUI) {
+        const epoch = documentEpoch;
+        const current = () => epoch === documentEpoch ? project.layers.find(item => item.id === l.id) : null;
+        ThemeMediaCropUI.mount(root, {
+          get() { const value = current(); return value ? { ...value, locked: M.effective(project, value).locked } : null; },
+          begin() { if (current()) checkpoint(); },
+          change(fn) { const value = current(); if (!value || M.effective(project, value).locked) return; fn(value); update({ fields: false, layers: false }); },
+          end() {},
+        });
+      }
+      if (!selectedPart && window.ThemeLayerEffectsUI) {
+        const epoch = documentEpoch;
+        const current = () => epoch === documentEpoch ? project.layers.find(item => item.id === l.id) : null;
+        ThemeLayerEffectsUI.mount(root, {
+          get() { const value = current(); return value ? { ...value, locked: M.effective(project, value).locked } : null; },
+          begin() { if (current()) checkpoint(); },
+          change(fn) { const value = current(); if (!value || M.effective(project, value).locked) return; fn(value); update({ fields: false, layers: false }); },
+          end(options = {}) { if (current() && options.fields !== false) propertiesUI(); },
+        });
+      }
+    }
     const sections = [...root.querySelectorAll(':scope>.property-section')];
     for (const section of sections) {
       const h = section.querySelector(':scope>h3');
@@ -1021,13 +1177,14 @@
       const title = h.textContent,
         kind = /关键帧|演变|退场|节奏|曲线|特效|干扰|流场|流体|共振材质/.test(title)
           ? 'motion'
-          : /外观|质感|样式|颜色|素材|背景/.test(title)
+          : /外观|质感|样式|颜色|素材|背景|效果器|合成|消息文字/.test(title)
             ? 'style'
             : 'layout';
       section.dataset.category = kind;
       section.hidden = propertyTab !== 'all' && propertyTab !== kind;
       const id = (selectedPart ? 'part:' : l.type + ':') + title,
-        closed = sectionState.get(id) ?? ['更多设置', '质感'].includes(title);
+        closed = sectionState.get(id) ?? (['更多设置', '质感'].includes(title) ||
+          (title === '弹幕区跟随' && !chatMode && l.attach !== 'chat' && l.scope !== 'chat'));
       section.classList.toggle('section-closed', closed);
       const b = document.createElement('button');
       b.className = 'section-toggle';
@@ -1045,19 +1202,29 @@
     tabs.className = 'property-tabs';
     tabs.setAttribute('role', 'tablist');
     for (const [value, label] of [
+      ['layout', '布局'],
+      ['style', '样式'],
+      ['motion', '动效'],
       ['all', '全部'],
-      ['layout', '排版'],
-      ['style', '外观'],
-      ['motion', '动画 / 特效'],
     ]) {
       const b = document.createElement('button');
       b.textContent = label;
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', propertyTab === value);
+      b.tabIndex = propertyTab === value ? 0 : -1;
       b.onclick = () => {
         ThemePropertySearch.clear();
         propertyTab = value;
         propertiesUI();
+      };
+      b.onkeydown = (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        const values = ['layout', 'style', 'motion', 'all'];
+        const index = e.key === 'Home' ? 0 : e.key === 'End' ? 3 :
+          (values.indexOf(value) + (e.key === 'ArrowRight' ? 1 : 3)) % 4;
+        propertyTab = values[index]; ThemePropertySearch.clear(); propertiesUI();
+        $('propertyFields').querySelector('[role="tab"][aria-selected="true"]')?.focus();
       };
       tabs.append(b);
     }
@@ -1077,7 +1244,7 @@
         b.onclick = () => choosePart(l.id, part.id);
         nav.append(b);
       }
-      if (propertyTab === 'motion' || propertyTab === 'style') {
+      if (propertyTab !== 'all') {
         const compact = document.createElement('details');
         compact.className = 'part-shortcuts-compact';
         const summary = document.createElement('summary');
@@ -1134,8 +1301,12 @@
     choose.onchange = () => {
       const key = choose.value,
         base = project.layers.find((x) => x.id === l.id);
-      if (key && !base.variants[key])
-        transact(() => (base.variants[key] = M.componentSnapshot(base)));
+      if (key && !base.variants[key]) {
+        const snapshot = M.componentSnapshot(base), candidate = { ...project,
+          layers: project.layers.map(layer => layer.id === base.id ? { ...layer, variants: { ...layer.variants, [key]: snapshot } } : layer) };
+        if (!roomForDocument(candidate)) { choose.value = activeVariant[l.id] || ''; return; }
+        transact(() => (base.variants[key] = snapshot));
+      }
       activeVariant[l.id] = key;
       selectedPart = null;
       update();
@@ -1255,16 +1426,25 @@
       l = items[0];
     $('selectionLabel').textContent =
       items.length > 1 ? items.length + ' 个图层' : l?.name || '画布';
-    $('propertyType').textContent = items.length > 1 ? '多选' : M.labels[l?.type] || '1920 × 1080';
+    const view = viewport();
+    $('propertyType').textContent = items.length > 1 ? '多选' : M.labels[l?.type] ||
+      (chatMode ? Math.round(view.w) + ' × ' + Math.round(view.h) : '1920 × 1080');
     if (!l) {
       const p = document.createElement('p');
       p.className = 'property-note';
-      p.textContent = '点击画布或图层开始编辑。可拖入左侧素材；背景、颗粒与希斯共振也是独立图层。';
+      p.textContent = chatMode
+        ? '选择消息组件，调整内部文字、部件、间距与特效。当前正在编辑「' + (view.name || '组合弹幕区') + '」，可在左侧组件面板添加内容。'
+        : '点击画布或左侧图层开始编辑；需要添加内容时切到组件面板。位置、样式与动效在右侧分别调整。';
       area.append(p);
       const b = document.createElement('button');
       b.className = 'wide';
-      b.textContent = '编辑画布背景';
+      b.textContent = chatMode ? '编辑弹幕区底板' : '编辑画布背景';
       b.onclick = () => {
+        if (chatMode) {
+          const chat = project.layers.find(x => x.id === viewport().id);
+          if (chat) select([chat.id]);
+          return;
+        }
         const bg = project.layers.find((x) => x.type === 'background');
         bg ? select([bg.id]) : add('background');
       };
@@ -1336,18 +1516,25 @@
     if (!virtual) {
       grid = section('变换');
       for (const [key, label, max] of [
-        ['x', 'X', 1920],
-        ['y', 'Y', 1080],
+        ['x', 'X', 7680],
+        ['y', 'Y', 4320],
         ['w', '宽度', 1920],
         ['h', '高度', 1080],
       ])
         f(grid, key, label, 'number', {
-          min: l.type === 'resonance' && ['x', 'y'].includes(key) ? -max : 0,
-          max,
+          min: ['x', 'y'].includes(key) ? -max : items.length === 1 && l.aspectLocked
+            ? Math.max(2, key === 'w' ? 2 * l.aspectRatio : 2 / l.aspectRatio) : 2,
+          max: items.length === 1 && l.aspectLocked && ['w', 'h'].includes(key)
+            ? Math.min(max, key === 'w' ? 1080 * l.aspectRatio : 1920 / l.aspectRatio) : max,
           step: 1,
         });
+      if (items.length === 1 && M.supportsAspect(l.type)) {
+        const locked = f(grid, 'aspectLocked', l.aspectLocked ? '宽高比已锁定' : '锁定宽高比', 'checkbox', { full: true });
+        locked.title = '锁定当前比例；手输宽高和拖动角点都会同比缩放。Shift 可临时锁定，按住时不会反向解锁。';
+      }
       if (!expanded().some((x) => ['game', 'chat'].includes(x.type)))
         f(grid, 'rotation', '旋转 °', 'number', { min: -180, max: 180 });
+      grid = section('合成');
       f(grid, 'opacity', '不透明度', 'number', { min: 0, max: 1, step: 0.05 });
       if (l.type !== 'group')
         f(grid, 'blend', '混合模式', 'select', {
@@ -1499,8 +1686,9 @@
       grid.append(b);
     }
     if (l.type === 'text') {
-      grid = section('文字');
+      grid = section('文字内容');
       f(grid, 'text', '内容', 'textarea', { full: true });
+      grid = section('文字样式');
       f(grid, 'font', '字体', 'select', {
         full: true,
         options: [
@@ -1887,7 +2075,16 @@
     if (componentTypes.includes(l.type))
       ThemeStyleLibrary.mount(area, {
         owner: () => styleLayer(project.layers.find((x) => x.id === l.id)),
-        change: (fn) => transact(() => fn(styleLayer(project.layers.find((x) => x.id === l.id)))),
+        change(fn) {
+          const base = project.layers.find(x => x.id === l.id), key = activeVariant[l.id] || '',
+            staged = M.layer({ ...styleLayer(base) });
+          fn(staged);
+          const candidate = { ...project, layers: project.layers.map(layer => layer.id !== base.id ? layer : key
+            ? { ...base, variants: { ...base.variants, [key]: M.componentSnapshot(staged) } } : staged) };
+          if (!roomForDocument(candidate, { allowReduction: true })) return false;
+          transact(() => fn(styleLayer(project.layers.find(x => x.id === l.id))));
+          return true;
+        },
         toast,
         locked: M.effective(project, l).locked,
       });
@@ -2001,6 +2198,7 @@
           point = new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse);
         checkpoint();
         drag = { index: i, inverse, point, curve: [...current().curve] };
+        curveSession = { surface: svg, finish };
         svg.setPointerCapture(e.pointerId);
       };
       h.onkeydown = (e) => {
@@ -2030,12 +2228,14 @@
       draw();
       update({ fields: false, layers: false });
     };
-    svg.onpointerup = svg.onpointercancel = () => {
+    function finish() {
+      if (curveSession?.surface === svg) curveSession = null;
       if (drag) {
         drag = null;
         propertiesUI();
       }
-    };
+    }
+    svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = finish;
     grid.append(svg);
     draw();
   }
@@ -2196,7 +2396,7 @@
         checkpoint();
         seekTracks(l, trackTime(l));
       },
-      end: () => update(),
+      end: (options = {}) => update({ fields: options.fields !== false, layers: false }),
       play: () => {
         if (l.type !== 'resonance') {
           $('testKind').value = l.type;
@@ -2392,6 +2592,9 @@
       const row = document.createElement('div');
       row.className = 'part-row' + (p.visible ? '' : ' dim');
       row.dataset.part = p.id;
+      row.dataset.owner = l.id;
+      row.dataset.treeKey = l.id + ':' + p.id;
+      row.dataset.treeParent = l.id;
       row.setAttribute('role', 'option');
       row.setAttribute('aria-label', l.name + ' / ' + p.name);
       row.setAttribute('aria-selected', selected.has(l.id) && selectedPart === p.id);
@@ -2482,10 +2685,7 @@
   }
   function addPart(l, kind) {
     if (M.effective(project, l).locked || !roomForPart(l)) return;
-    transact(() => {
-      const current = styleLayer(project.layers.find((x) => x.id === l.id)),
-        id = 'part-' + crypto.randomUUID();
-      current.parts.push({
+    const id = 'part-' + crypto.randomUUID(), part = {
         id,
         kind,
         name: M.partLabels[kind],
@@ -2498,7 +2698,11 @@
         text: '{用户名} · 信号已收到',
         size: 18,
         color: kind === 'text' ? '#93c5b6' : '#6b8177',
-      });
+      };
+    if (!roomForDocument(withComponentParts(l.id, [...l.parts, part]))) return;
+    transact(() => {
+      const current = styleLayer(project.layers.find((x) => x.id === l.id));
+      current.parts.push(part);
       selectedPart = id;
     });
   }
@@ -2563,7 +2767,6 @@
       return;
     }
     if (!roomForPart(l)) return;
-    transact(() => {
       const source = previewRecords()
           .findLast((m) => m.kind === l.type && (!m.layerId || m.layerId === l.id))
           ?.parts?.find((p) => p.id === part.id),
@@ -2610,6 +2813,8 @@
       }
       const motion = ThemeGeometry.duplicatePartMotion(part, source, trackSample(part, l));
       Object.assign(copy, motion.value);
+      if (!roomForDocument(withComponentParts(l.id, [...l.parts, copy]))) return;
+    transact(() => {
       l.parts.push(copy);
       selectedPart = copy.id;
       if (motion.adjusted) toast('副本已调整到可编辑范围内，完整运动轨迹已保留。');
@@ -2840,6 +3045,11 @@
         }
         const part = selectedPartData();
         if (!part) return;
+        if (key === 'src') {
+          const currentLayer = selectedLayers()[0], parts = currentLayer.parts.map(item =>
+            item.id === part.id ? { ...item, src: el.value } : item);
+          if (!roomForDocument(withComponentParts(currentLayer.id, parts), { allowReduction: true })) return;
+        }
         if (key === 'placement') {
           const measured = trackMessage(l)?.parts?.find((r) => r.id === part.id),
             next = ThemeGeometry.rebasePart(part, el.value, measured);
@@ -2868,7 +3078,12 @@
       };
       el.onchange = () => {
         dirty = false;
-        if (['color', 'placement', 'locked'].includes(key)) propertiesUI();
+        if (['placement', 'locked'].includes(key)) propertiesUI();
+        else if (type === 'number') {
+          const current = selectedPartData();
+          if (current && !trackList(current, l)?.some(track => track.property === key && track.enabled !== false))
+            el.value = typeof current[key] === 'number' ? +current[key].toFixed(3) : current[key] ?? '';
+        }
       };
       return el;
     };
@@ -2882,8 +3097,8 @@
         ['free', '自由定位'],
       ],
     });
-    input('x', 'X 偏移 / 位置', 'number', { min: -600, max: 1920 });
-    input('y', 'Y 偏移 / 位置', 'number', { min: -600, max: 1080 });
+    input('x', 'X 偏移 / 位置', 'number', { min: -7680, max: 7680 });
+    input('y', 'Y 偏移 / 位置', 'number', { min: -4320, max: 4320 });
     const measure = document.createElement('output');
     measure.dataset.partMeasure = '';
     measure.className = 'part-measure full';
@@ -3246,7 +3461,7 @@
   }, 100);
   function guideGeometry() {
     const l = selectedLayers()[0];
-    if (!l || selectedPart || M.effective(project, l).locked) return null;
+    if (!l || selected.size !== 1 || selectedPart || M.effective(project, l).locked) return null;
     const chat = ThemeInstances.owner(project, l);
     if (l.type === 'resonance') {
       const sample = frame.contentWindow.ThemeRenderer.fieldValues(l.id) || l,
@@ -3353,33 +3568,47 @@
   }
   function fit() {
     const r = $('canvasArea').getBoundingClientRect(),
-      v = viewport();
-    $('artboard').style.width = v.w + 'px';
-    $('artboard').style.height = v.h + 'px';
-    frame.style.left = -v.x + 'px';
-    frame.style.top = -v.y + 'px';
+      v = viewport(),
+      pose = ThemeCanvasWorkspace.camera(r, v, zoom, pan),
+      board = $('artboard');
+    scale = pose.scale;
+    board.style.width = v.w + 'px';
+    board.style.height = v.h + 'px';
+    board.style.setProperty('--editor-camera-scale', scale);
+    board.dataset.outputLabel = chatMode ? '弹幕区边界 · 框外为工作区' : '直播输出 1920 × 1080 · 框外不输出';
+    ThemeCanvasWorkspace.renderFrame(frame, r, v, pose);
     for (const el of [$('selection'), $('guides')])
       el.style.transform = `translate(${-v.x}px,${-v.y}px)`;
-    scale =
-      zoom === 'fit'
-        ? Math.max(0.05, Math.min((r.width - 90) / v.w, (r.height - 94) / v.h))
-        : +zoom;
-    const x = (r.width - v.w * scale) / 2 + pan.x + 10,
-      y = (r.height - v.h * scale) / 2 + pan.y + 10;
+    const { x, y } = pose;
+    // Hit testing covers the whole working area, including objects outside
+    // the output boundary. The same coordinate conversion works in both areas.
+    Object.assign($('hitArea').style, { left: -x / scale + 'px', top: -y / scale + 'px',
+      width: r.width / scale + 'px', height: r.height / scale + 'px', right: 'auto', bottom: 'auto' });
     $('artboard').style.transform = `translate(${x}px,${y}px) scale(${scale})`;
     $('zoomLabel').textContent =
       Math.round(scale * 100) + '% · ' + Math.round(v.w) + ' × ' + Math.round(v.h);
+    if (zoom !== 'fit') {
+      let cameraOption = $('zoom').querySelector('option[data-camera]');
+      if (!cameraOption) {
+        cameraOption = document.createElement('option');
+        cameraOption.dataset.camera = 'true';
+        $('zoom').append(cameraOption);
+      }
+      cameraOption.value = String(scale);
+      cameraOption.textContent = Math.round(scale * 100) + '%';
+      $('zoom').value = String(scale);
+    } else $('zoom').value = 'fit';
     for (const [id, limit, offset] of [
-      ['rulerX', v.w, x - 22],
-      ['rulerY', v.h, y - 22],
+      ['rulerX', r.width, x - v.x * scale],
+      ['rulerY', r.height, y - v.y * scale],
     ]) {
       const root = $(id);
       root.replaceChildren();
-      for (let n = 0; n <= limit; n += 100) {
+      for (const { value: n, pixel } of ThemeCanvasWorkspace.rulerTicks(limit, offset, scale)) {
         const tick = document.createElement('span');
         tick.className = 'ruler-tick';
-        tick.style[id === 'rulerX' ? 'left' : 'top'] = offset + n * scale + 'px';
-        if (n % 200 === 0) {
+        tick.style[id === 'rulerX' ? 'left' : 'top'] = pixel - 22 + 'px';
+        {
           const b = document.createElement('b');
           b.textContent = n;
           tick.append(b);
@@ -3395,19 +3624,14 @@
     return { x: v.x + (e.clientX - r.left) / unit, y: v.y + (e.clientY - r.top) / unit };
   }
   function inside(l, p) {
-    const a = (-l.rotation * Math.PI) / 180,
-      cx = l.x + l.w / 2,
-      cy = l.y + l.h / 2,
-      x = (p.x - cx) * Math.cos(a) - (p.y - cy) * Math.sin(a) + cx,
-      y = (p.x - cx) * Math.sin(a) + (p.y - cy) * Math.cos(a) + cy;
-    return x >= l.x && x <= l.x + l.w && y >= l.y && y <= l.y + l.h;
+    return ThemeGeometry.hitLayer(l, p, 5 / scale);
   }
   function canvasLayer(l) {
     return (
       l.type !== 'group' &&
       !ThemeInstances.feed(project, l) &&
       (!chatMode ||
-        l.standalone ||
+        (componentTypes.includes(l.type) && l.standalone) ||
         l.id === viewport().id ||
         ThemeInstances.owner(project, l)?.id === viewport().id)
     );
@@ -3419,6 +3643,7 @@
         (l) =>
           canvasLayer(l) &&
           M.effective(project, l).visible &&
+          M.effective(project, l).opacity > .001 &&
           !M.effective(project, l).locked &&
           inside(l, p),
       );
@@ -3465,6 +3690,37 @@
   }
   const hitArea = $('hitArea');
   let partGesture = null;
+  let edgePointer = null, edgePanFrame = 0, edgePanTime = 0;
+  function stopEdgePan() {
+    cancelAnimationFrame(edgePanFrame);
+    edgePanFrame = 0;
+    edgePointer = null;
+  }
+  function startEdgePan(e) {
+    edgePointer = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey };
+    if (edgePanFrame) return;
+    edgePanTime = performance.now();
+    const step = (now) => {
+      if (!gesture || !['move', 'resize', 'marquee'].includes(gesture.type) || !edgePointer) {
+        stopEdgePan(); return;
+      }
+      const r = $('canvasArea').getBoundingClientRect(),
+        elapsed = Math.min(32, now - edgePanTime) / 16.667,
+        speed = (at, min, max) => at < min + 36 ? -Math.min(15, (min + 36 - at) * .32)
+          : at > max - 36 ? Math.min(15, (at - max + 36) * .32) : 0,
+        dx = speed(edgePointer.clientX, r.left + 22, r.right) * elapsed,
+        dy = speed(edgePointer.clientY, r.top + 22, r.bottom) * elapsed;
+      edgePanTime = now;
+      if (dx || dy) {
+        pan.x -= dx; pan.y -= dy;
+        if (gestureView) { gestureView.left -= dx; gestureView.top -= dy; }
+        fit();
+        moveGesture(edgePointer);
+      }
+      edgePanFrame = requestAnimationFrame(step);
+    };
+    edgePanFrame = requestAnimationFrame(step);
+  }
   // Keep the pointer origin fixed while the focused chat viewport is resized.
   hitArea.addEventListener(
     'pointerdown',
@@ -3481,6 +3737,7 @@
     'pointerdown',
     (e) => {
       if (e.button !== 0 || tool === 'hand' || space) return;
+      if (e.shiftKey) return;
       const g = guideGeometry();
       if (!g) return;
       const p = point(e),
@@ -3492,7 +3749,7 @@
       checkpoint();
       const at = trackTime(g.layer);
       if (trackList(g.layer, g.layer)?.length) seekTracks(g.layer, at);
-      effectGesture = { start: p, source: structuredClone(g), resize, at };
+      effectGesture = { start: p, source: structuredClone(g), original: structuredClone(project.layers.find(l => l.id === g.layer.id)), resize, at };
       hitArea.setPointerCapture(e.pointerId);
     },
     true,
@@ -3551,6 +3808,7 @@
     'pointerdown',
     (e) => {
       if (e.button !== 0 || tool === 'hand' || space) return;
+      if (e.shiftKey || selected.size > 1) return;
       const candidates = project.layers.filter((l) => l.parts?.length),
         selectedComponent = selectedLayers()[0],
         layer = selectedComponent?.parts?.length
@@ -3595,6 +3853,7 @@
       if (trackList(part, layer)?.length) seekTracks(layer, at);
       partGesture = {
         start: pos,
+        original: structuredClone(part),
         part: { ...structuredClone(part), x: sample.x ?? part.x, y: sample.y ?? part.y },
         rect: r,
         resize: corner,
@@ -3641,12 +3900,13 @@
       true,
     );
   hitArea.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (![0, 1].includes(e.button)) return;
     $('contextMenu').hidden = true;
     if (inlineId) return;
     const p = point(e);
-    if (tool === 'hand' || space) {
+    if (tool === 'hand' || space || e.button === 1) {
       gesture = { type: 'pan', start: { x: e.clientX, y: e.clientY }, pan: { ...pan } };
+      hitArea.style.cursor = 'grabbing';
     } else {
       let corner = null;
       const one = expanded().filter(canvasLayer);
@@ -3668,8 +3928,20 @@
       }
       const target = corner ? one[0] : hit(p);
       if (target) {
+        const selectionId = target.parent && !e.ctrlKey && !e.metaKey && !selected.has(target.id)
+          ? target.parent : target.id;
+        if (!corner && target.parent && (e.ctrlKey || e.metaKey)) {
+          const next = e.shiftKey ? new Set(selected) : new Set();
+          next.delete(target.parent);
+          if (e.shiftKey && selected.has(target.id)) next.delete(target.id); else next.add(target.id);
+          select([...next]);
+          if (!next.has(target.id)) { hitArea.focus(); e.preventDefault(); return; }
+        } else if (!corner && e.shiftKey && (selected.has(selectionId) || selected.has(target.parent))) {
+          select([...selected].filter(id => id !== selectionId && id !== target.parent));
+          hitArea.focus(); e.preventDefault(); return;
+        }
         if (!selected.has(target.id) && !selected.has(target.parent)) {
-          select(e.shiftKey ? [...selected, target.id] : [target.id]);
+          select(e.shiftKey ? [...selected, selectionId] : [selectionId]);
         }
         checkpoint();
         gesture = {
@@ -3683,15 +3955,36 @@
         };
       } else {
         if (!e.shiftKey) select([]);
-        gesture = { type: 'marquee', start: p, previous: [...selected] };
+        gesture = { type: 'marquee', start: p, previous: [...selected], deep: e.ctrlKey || e.metaKey };
       }
     }
     hitArea.setPointerCapture(e.pointerId);
     hitArea.focus();
+    if (gesture?.type !== 'pan') startEdgePan(e);
     e.preventDefault();
   });
-  hitArea.addEventListener('pointermove', (e) => {
-    if (!gesture) return;
+  function moveGesture(e) {
+    if (!gesture) {
+      if (tool === 'hand' || space) { hitArea.style.cursor = 'grab'; return; }
+      const p = point(e), items = expanded().filter(canvasLayer),
+        chosen = selectedPart ? partRects(selectedLayers()[0]).find(part => part.id === selectedPart) : null,
+        box = chosen || (items.length === 1 ? items[0] : items.length ? { ...M.bounds(items), rotation: 0 } : null);
+      let cursor = hit(p) ? 'move' : 'default';
+      const partResizeAllowed = !chosen || (!partLocked(selectedLayers()[0], selectedPartData()) &&
+        !(chosen.kind === 'title' && selectedLayers()[0]?.type === 'fleet'));
+      if (box && partResizeAllowed && items.every(l => !M.effective(project, l).locked))
+        for (const [corner, x, y] of [['tl', 0, 0], ['tr', box.w, 0], ['bl', 0, box.h], ['br', box.w, box.h]]) {
+          if (chosen && corner !== 'br') continue;
+          const at = ThemeGeometry.point(box, x, y);
+          if (Math.hypot(p.x - at.x, p.y - at.y) < 12 / scale) {
+            const angle = ((box.rotation || 0) + (corner === 'tl' || corner === 'br' ? 45 : 135) + 180) % 180;
+            cursor = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'][Math.round(angle / 45) % 4];
+          }
+        }
+      hitArea.style.cursor = cursor;
+      return;
+    }
+    if (edgePointer) edgePointer = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey };
     const g = gesture,
       p = point(e);
     if (g.type === 'pan') {
@@ -3710,18 +4003,11 @@
       };
       selected = new Set([
         ...g.previous,
-        ...project.layers
-          .filter(
-            (l) =>
-              canvasLayer(l) &&
-              !M.effective(project, l).locked &&
-              M.effective(project, l).visible &&
-              l.x >= r.x &&
-              l.y >= r.y &&
-              l.x + l.w <= r.x + r.w &&
-              l.y + l.h <= r.y + r.h,
-          )
-          .map((l) => l.id),
+        ...ThemeGeometry.marqueeSelection(project.layers, r, {
+          painted: l => canvasLayer(l) && M.effective(project, l).visible,
+          editable: l => !M.effective(project, l).locked,
+          deep: g.deep,
+        }),
       ]);
       selectionUI();
       const box = document.createElement('div');
@@ -3744,9 +4030,8 @@
         y = s.y;
       }
       for (const axis of ['x', 'y']) {
-        const lo = Math.max(...g.layers.map((l) => M.positionRange(l, axis)[0] - l[axis])),
-          hi = Math.min(...g.layers.map((l) => M.positionRange(l, axis)[1] - l[axis])),
-          delta = M.num((axis === 'x' ? x : y) - g.bounds[axis], lo, hi, 0);
+        const delta = ThemeCanvasWorkspace.commonDelta(g.layers, axis,
+          (axis === 'x' ? x : y) - g.bounds[axis], M.positionRange);
         if (axis === 'x') x = g.bounds.x + delta;
         else y = g.bounds.y + delta;
       }
@@ -3764,8 +4049,14 @@
         ly = -dx * Math.sin(a) + dy * Math.cos(a);
       let w = Math.max(8, original.w + (left ? -lx : lx)),
         h = Math.max(8, original.h + (top ? -ly : ly));
-      if (e.shiftKey || g.layers.some((l) => l.type === 'game' || l.type === 'music'))
+      if (e.shiftKey || g.layers.some((l) => l.type === 'game' || l.type === 'music' || l.aspectLocked))
         h = w / (original.w / original.h);
+      const maxW = Math.min(...g.layers.map(item => original.w * 1920 / item.w)),
+        maxH = Math.min(...g.layers.map(item => original.h * 1080 / item.h));
+      if (e.shiftKey || g.layers.some(l => l.type === 'game' || l.type === 'music' || l.aspectLocked)) {
+        const bounded = Math.min(1, maxW / w, maxH / h);
+        w *= bounded; h *= bounded;
+      } else { w = Math.min(w, maxW); h = Math.min(h, maxH); }
       const sx = left ? 1 : -1,
         sy = top ? 1 : -1,
         cx = original.x + original.w / 2,
@@ -3787,17 +4078,49 @@
       }
     }
     update({ fields: false, layers: false });
-  });
+  }
+  hitArea.addEventListener('pointermove', moveGesture);
   function endGesture() {
+    stopEdgePan();
     if (!gesture) return;
     gesture = null;
+    hitArea.style.cursor = space || tool === 'hand' ? 'grab' : 'default';
     $('guides').replaceChildren();
     update();
   }
+  function cancelGesture() {
+    stopEdgePan();
+    const oldGesture = gesture, oldPart = partGesture, oldEffect = effectGesture;
+    gesture = null; partGesture = null; effectGesture = null;
+    if (oldGesture?.layers)
+      for (const before of oldGesture.layers) {
+        const current = project.layers.find(l => l.id === before.id);
+        if (current) Object.assign(current, before);
+      }
+    if (oldGesture?.type === 'pan') { pan = oldGesture.pan; fit(); }
+    if (oldGesture?.type === 'marquee') selected = new Set(oldGesture.previous);
+    if (oldPart) {
+      const current = selectedPartData();
+      if (current) Object.assign(current, oldPart.original);
+    }
+    if (oldEffect) {
+      const current = project.layers.find(l => l.id === oldEffect.original.id);
+      if (current) Object.assign(current, oldEffect.original);
+    }
+    $('guides').replaceChildren(); update();
+  }
   hitArea.addEventListener('pointerup', endGesture);
   hitArea.addEventListener('pointercancel', endGesture);
+  hitArea.addEventListener('lostpointercapture', endGesture);
+  window.addEventListener('blur', () => {
+    curveSession?.finish();
+    endGesture();
+    gestureView = null;
+    if (partGesture || effectGesture) { partGesture = null; effectGesture = null; update(); }
+  });
   hitArea.addEventListener('dblclick', (e) => {
     const l = hit(point(e));
+    if (l?.parent) select([l.id]);
     if (l?.type === 'text') editText(l);
   });
   hitArea.addEventListener('contextmenu', (e) => {
@@ -3824,7 +4147,7 @@
     else {
       const l = hit(pos);
       if (l) {
-        if (selectedPart || !selected.has(l.id)) select([l.id]);
+        if (selectedPart || (!selected.has(l.id) && !selected.has(l.parent))) select([l.parent || l.id]);
       } else select([]);
     }
     context(e.clientX, e.clientY);
@@ -3859,7 +4182,9 @@
         ? items.length + ' 个图层'
         : l?.name || '画布';
     const labels = {
-      duplicate: part ? '复制部件' : '复制图层',
+      duplicate: part ? '创建部件副本' : '创建图层副本',
+      copy: '复制到剪贴板',
+      paste: '粘贴图层',
       group: '编组',
       lock: part
         ? part.locked
@@ -3881,6 +4206,8 @@
     };
     const disabled = {
       duplicate: !copyable,
+      copy: !!part || !all.length,
+      paste: false,
       group: !!part || all.filter((l) => l.type !== 'group').length < 2,
       lock: !l || (!!part && M.effective(project, l).locked),
       hide: !l,
@@ -3940,12 +4267,13 @@
 
   function editText(l) {
     inlineId = l.id;
-    const t = $('inlineText');
+    const t = $('inlineText'), v = viewport();
+    t.title = 'Ctrl/Cmd + Enter 完成 · Escape 取消';
     t.hidden = false;
     t.value = l.text;
     Object.assign(t.style, {
-      left: l.x + 'px',
-      top: l.y + 'px',
+      left: l.x - v.x + 'px',
+      top: l.y - v.y + 'px',
       width: l.w + 'px',
       height: l.h + 'px',
       fontSize: l.size + 'px',
@@ -3961,9 +4289,24 @@
   $('inlineText').addEventListener('blur', () => {
     if (!inlineId) return;
     const l = project.layers.find((l) => l.id === inlineId);
-    if (l && l.text !== $('inlineText').value) transact(() => (l.text = $('inlineText').value));
+    if (l && l.text !== $('inlineText').value) {
+      checkpoint(); l.text = $('inlineText').value;
+      update({ fields: false, layers: false });
+      const field = $('propertyFields').querySelector('[data-prop=text]');
+      if (field && field !== document.activeElement) field.value = l.text;
+    }
     inlineId = null;
     $('inlineText').hidden = true;
+  });
+  $('inlineText').addEventListener('keydown', e => {
+    if (e.isComposing) return;
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation(); inlineId = null;
+      $('inlineText').hidden = true; hitArea.focus({ preventScroll: true });
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault(); e.stopPropagation(); $('inlineText').blur();
+      hitArea.focus({ preventScroll: true });
+    }
   });
   $('canvasArea').addEventListener(
     'wheel',
@@ -3971,18 +4314,16 @@
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const r = $('canvasArea').getBoundingClientRect(),
-          mx = e.clientX - r.left - r.width / 2 - 10,
-          my = e.clientY - r.top - r.height / 2 - 10,
           old = scale,
-          next = M.num(scale * Math.exp(-e.deltaY * 0.002), 0.1, 2, scale);
-        pan = { x: mx - ((mx - pan.x) * next) / old, y: my - ((my - pan.y) * next) / old };
+          next = M.num(scale * Math.exp(-e.deltaY * 0.002), ThemeCanvasWorkspace.minZoom, ThemeCanvasWorkspace.maxZoom, scale);
+        pan = ThemeCanvasWorkspace.zoomPan(r, { x: e.clientX - r.left, y: e.clientY - r.top }, old, next, pan);
         zoom = next;
         $('zoom').value = '';
         fit();
-      } else if (tool === 'hand') {
+      } else {
         e.preventDefault();
-        pan.x -= e.deltaX;
-        pan.y -= e.deltaY;
+        pan.x -= e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX;
+        pan.y -= e.shiftKey && !e.deltaX ? 0 : e.deltaY;
         fit();
       }
     },
@@ -4025,7 +4366,7 @@
     if (type) add(type, p);
     else if (e.dataTransfer.files.length) await importAssets(e.dataTransfer.files, p);
   });
-  let pendingAssetTarget = null,
+  let pendingAssetTarget = null, pendingAssetInsertion = null,
     assetRequest = 0;
   const assetRequests = new Map();
   function resolveAssetTarget(target) {
@@ -4039,7 +4380,7 @@
     if (target.part && item.locked) throw Error('目标部件已锁定，未替换素材。');
     return { base, item };
   }
-  function openAssetPicker(target = null) {
+  function openAssetPicker(target = null, insertion = null) {
     const input = $('assetFile');
     if (target) {
       const base = project.layers.find((l) => l.id === target.layer);
@@ -4050,9 +4391,10 @@
       target = { ...target, variant: target.part ? activeVariant[base.id] || '' : '' };
     }
     pendingAssetTarget = target;
+    pendingAssetInsertion = insertion ? { ...insertion, epoch: documentEpoch } : null;
     input.value = '';
     input.multiple = !target;
-    const kind = target ? project.layers.find((l) => l.id === target.layer)?.type : null;
+    const kind = target ? project.layers.find((l) => l.id === target.layer)?.type : insertion?.type;
     input.accept =
       target?.part || ['image', 'game'].includes(kind)
         ? 'image/png,image/jpeg,image/webp,image/gif'
@@ -4062,90 +4404,81 @@
     input.click();
   }
   async function importAssets(files, point, target = null) {
-    const list = [...files];
+    const list = target ? [...files].slice(0, 1) : [...files];
+    if (!list.length) return;
     if (!target && !roomForLayers(list.length)) return;
     const epoch = documentEpoch,
       request = ++assetRequest,
-      targetKey = target ? JSON.stringify(target) : null;
+      targetKey = target ? JSON.stringify(target) : null,
+      destinationChat = chatMode ? viewport().id : '';
     if (targetKey) assetRequests.set(targetKey, request);
-    let index = 0;
     try {
-      for (const file of target ? list.slice(0, 1) : list) {
-        try {
-          ThemeEditorImports.validate(file);
-          if (target) {
-            const { base } = resolveAssetTarget(target);
-            if (
-              (target.part || ['image', 'game'].includes(base.type)) &&
-              !file.type.startsWith('image/')
-            )
-              throw Error('这个位置请使用图片文件。');
-            if (base.type === 'video' && !file.type.startsWith('video/'))
-              throw Error('这个图层请使用视频文件。');
-          }
-          const asset = await ThemeEditorImports.read(file);
-          if (epoch !== documentEpoch) {
-            toast('主题已经切换，本次素材未写入。');
-            return;
-          }
-          if (!target && !roomForLayers(1)) return;
-          if (target) {
-            if (assetRequests.get(targetKey) !== request) return;
-            const { base, item } = resolveAssetTarget(target);
-            transact(() => {
-              item.src = asset.src;
-              if (base.type === 'background') base.mode = asset.type;
-            });
-            toast('已替换 ' + asset.name + (list.length > 1 ? '（采用第一个文件）' : ''));
-          } else {
-            let at = point;
-            if (chatMode && !at) {
-              const v = viewport();
-              at = { x: v.x + 24, y: v.y + v.h * 0.4 };
-            }
-            const v = viewport(),
-              factor = Math.min(
-                1,
-                (chatMode ? Math.max(2, v.w - 48) : 400) / asset.width,
-                Math.min(540, chatMode ? Math.max(2, v.h - 48) : 540) / asset.height,
-              );
-            transact(() => {
-              const l = M.layer({
-                id: 'layer-' + crypto.randomUUID(),
-                type: asset.type,
-                name: asset.name,
-                src: asset.src,
-                x: (at?.x ?? 380) + index * 24,
-                y: (at?.y ?? 320) + index * 24,
-                w: asset.width * factor,
-                h: asset.height * factor,
-              });
-              if (chatMode) {
-                l.scope = 'chat';
-                l.attach = 'chat';
-              }
-              project.layers.push(l);
-              selected = new Set([l.id]);
-            });
-            toast('已嵌入 ' + asset.name);
-          }
-          index++;
-        } catch (error) {
-          toast(file.name + '：' + error.message);
-        }
+      const validation = window.ThemeDocumentValidation;
+      if (!validation?.jsonBytes) throw Error('容量检查尚未准备好，请刷新编辑器。');
+      for (const file of list) ThemeEditorImports.validate(file);
+      const replaced = target ? resolveAssetTarget(target) : null;
+      if (replaced) for (const file of list) {
+        if ((target.part || ['image', 'game'].includes(replaced.base.type)) && !file.type.startsWith('image/'))
+          throw Error('这个位置请使用图片文件。');
+        if (replaced.base.type === 'video' && !file.type.startsWith('video/')) throw Error('这个图层请使用视频文件。');
       }
+      const previousBytes = validation.jsonBytes(project, M, Number.MAX_SAFE_INTEGER),
+        replacedBytes = replaced ? validation.jsonBytes(replaced.item.src || '', M, Number.MAX_SAFE_INTEGER) : 0,
+        sourceBytes = list.reduce((total, file) => total + Math.ceil(file.size / 3) * 4 + ('data:' + file.type + ';base64,').length + 2, 0),
+        minimumBytes = previousBytes - replacedBytes + sourceBytes;
+      // Lower-bound preflight avoids decoding hundreds of large files at once.
+      // Metadata is checked exactly in the staged document before one commit.
+      if (minimumBytes > validation.maxBytes && (!target || minimumBytes >= previousBytes))
+        throw Error('这些素材会使主题超过约 40 MB；整批未导入，请减少素材后重试。');
+      const assets = [];
+      for (const file of list) {
+        try { assets.push(await ThemeEditorImports.read(file)); }
+        catch (error) { throw Error(file.name + '：' + (error.message || '素材读取失败')); }
+        if (epoch !== documentEpoch) throw Error('主题已经切换，本次素材未写入。');
+      }
+      if (target) {
+        if (assetRequests.get(targetKey) !== request) return;
+        const { base, item } = resolveAssetTarget(target), asset = assets[0];
+        const candidate = target.part
+          ? withComponentParts(base.id, (target.variant ? base.variants[target.variant].parts : base.parts)
+              .map(part => part.id === target.part ? { ...part, src: asset.src } : part), target.variant || '')
+          : { ...project, layers: project.layers.map(layer => layer.id === base.id
+              ? { ...layer, src: asset.src, ...(base.type === 'background' ? { mode: asset.type } : {}) } : layer) };
+        if (!roomForDocument(candidate, { allowReduction: true })) return;
+        transact(() => { item.src = asset.src; if (base.type === 'background') base.mode = asset.type; });
+        toast('已替换 ' + asset.name);
+      } else {
+        if (chatMode && destinationChat !== viewport().id) throw Error('正在编辑的弹幕区已改变，本次素材未写入。');
+        if (!roomForLayers(assets.length)) return;
+        const view = viewport(), items = assets.map((asset, index) => {
+          const factor = Math.min(1, (chatMode ? Math.max(2, view.w - 48) : 400) / asset.width,
+            Math.min(540, chatMode ? Math.max(2, view.h - 48) : 540) / asset.height),
+            at = point || insertionPoint(asset.width * factor, asset.height * factor),
+            layer = M.layer({ id: 'layer-' + crypto.randomUUID(), type: asset.type, name: asset.name, src: asset.src,
+              x: at.x + index * 24, y: at.y + index * 24, w: asset.width * factor, h: asset.height * factor });
+          if (chatMode) Object.assign(layer, { scope: 'chat', attach: 'chat', chatId: destinationChat });
+          return layer;
+        });
+        if (!roomForDocument({ ...project, layers: [...project.layers, ...items] })) return;
+        transact(() => { project.layers.push(...items); selected = new Set(items.map(item => item.id)); });
+        toast('已嵌入 ' + items.length + ' 个素材；可一次撤销整批导入。');
+      }
+    } catch (error) {
+      toast((error.message || '素材读取失败。') + ' 当前画布未改变。');
     } finally {
       if (targetKey && assetRequests.get(targetKey) === request) assetRequests.delete(targetKey);
     }
   }
   $('assetFile').onchange = async (e) => {
     const files = [...e.target.files],
-      target = pendingAssetTarget;
+      target = pendingAssetTarget, insertion = pendingAssetInsertion;
     pendingAssetTarget = null;
+    pendingAssetInsertion = null;
     e.target.value = '';
-    await importAssets(files, undefined, target);
+    if (insertion && insertion.epoch !== documentEpoch) { toast('主题已切换，本次素材未写入。'); return; }
+    await importAssets(files, insertion?.point, target);
   };
-  $('assetFile').oncancel = () => (pendingAssetTarget = null);
+  $('assetFile').oncancel = () => { pendingAssetTarget = null; pendingAssetInsertion = null; };
   $('importAsset').onclick = () => openAssetPicker();
   $('assetFile').closest('label').onclick = (e) => {
     if (e.target === $('assetFile')) return;
@@ -4157,17 +4490,16 @@
       alignPart(which);
       return;
     }
-    const items = expanded().filter((l) => canvasLayer(l) && !M.effective(project, l).locked);
-    if (!items.length) return;
-    const b = items.length === 1 ? viewport() : M.bounds(items);
+    const units = ThemeGeometry.selectionUnits(project.layers, selected,
+      l => canvasLayer(l) && !M.effective(project, l).locked);
+    if (!units.length) return;
+    const b = units.length === 1 ? viewport() : ThemeGeometry.visualBounds(units.map(unit => unit.bounds));
     transact(() => {
-      for (const l of items) {
-        if (which === 'left') l.x = b.x;
-        if (which === 'center') l.x = b.x + (b.w - l.w) / 2;
-        if (which === 'right') l.x = b.x + b.w - l.w;
-        if (which === 'top') l.y = b.y;
-        if (which === 'middle') l.y = b.y + (b.h - l.h) / 2;
-        if (which === 'bottom') l.y = b.y + b.h - l.h;
+      for (const unit of units) {
+        const offset = ThemeGeometry.alignmentDelta(unit.bounds, b, which),
+          dx = ThemeCanvasWorkspace.commonDelta(unit.members, 'x', offset.x, M.positionRange),
+          dy = ThemeCanvasWorkspace.commonDelta(unit.members, 'y', offset.y, M.positionRange);
+        for (const l of unit.members) { l.x += dx; l.y += dy; }
       }
     });
   }
@@ -4183,17 +4515,20 @@
   $('layerUp').onclick = () => order(1);
   $('layerDown').onclick = () => order(-1);
   $('zoom').onchange = (e) => {
+    if (e.target.value === 'all') { focusAll(); return; }
     zoom = e.target.value;
     pan = { x: 0, y: 0 };
     fit();
   };
   $('zoomIn').onclick = () => {
-    zoom = Math.min(2, scale * 1.2);
+    zoom = Math.min(ThemeCanvasWorkspace.maxZoom, scale * 1.2);
+    pan = { x: pan.x * zoom / scale, y: pan.y * zoom / scale };
     $('zoom').value = '';
     fit();
   };
   $('zoomOut').onclick = () => {
-    zoom = Math.max(0.1, scale / 1.2);
+    zoom = Math.max(ThemeCanvasWorkspace.minZoom, scale / 1.2);
+    pan = { x: pan.x * zoom / scale, y: pan.y * zoom / scale };
     $('zoom').value = '';
     fit();
   };
@@ -4201,7 +4536,15 @@
     $('canvasGrid').hidden = !$('canvasGrid').hidden;
     $('gridToggle').classList.toggle('active', !$('canvasGrid').hidden);
   };
-  $('projectName').onchange = (e) => transact(() => (project.name = e.target.value));
+  const commitProjectName = () => {
+    const value = $('projectName').value;
+    if (value !== project.name) transact(() => (project.name = value));
+  };
+  $('projectName').onchange = commitProjectName;
+  $('projectName').onblur = commitProjectName;
+  $('projectName').onkeydown = event => {
+    if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); commitProjectName(); $('projectName').blur(); }
+  };
   document
     .querySelectorAll('[data-close]')
     .forEach((b) => (b.onclick = () => b.closest('dialog').close()));
@@ -4211,9 +4554,16 @@
   };
   $('chooseTemplate').onclick = () => $('templateDialog').showModal();
   $('helpOpen').onclick = () => $('helpDialog').showModal();
+  async function prepareProjectSwitch() {
+    if (await save() === false) throw Error('当前草稿尚未保存，请先处理保存提示。');
+    await draftSync.announceSwitch();
+    await window.ThemeObsLive?.pause();
+    await window.ThemePublish?.pause();
+  }
   document.querySelectorAll('[data-template]').forEach(
     (b) =>
-      (b.onclick = () => {
+      (b.onclick = async () => {
+        try { await prepareProjectSwitch(); } catch (error) { toast(error.message); return; }
         let old;
         try {
           old =
@@ -4228,6 +4578,7 @@
           project.settings = settings;
           selected.clear();
         });
+        window.dispatchEvent(new Event('control-project-detach'));
         $('templateDialog').close();
         zoom = 'fit';
         pan = { x: 0, y: 0 };
@@ -4235,45 +4586,49 @@
       }),
   );
   function download(name, value) {
+    const exported = ThemeDocumentValidation.serializeForExport(value, M);
     const url = URL.createObjectURL(
-        new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }),
+        new Blob([exported.text], { type: 'application/json' }),
       ),
       a = document.createElement('a');
     a.href = url;
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    if (exported.warning) toast(exported.warning);
   }
-  $('exportProject').onclick = () =>
-    download(project.name.replace(/[<>:"/\\|?*]/g, '-') + '.json', project);
+  $('exportProject').onclick = () => {
+    try { download(project.name.replace(/[<>:"/\\|?*]/g, '-') + '.json', project); }
+    catch (error) { toast(error.message || '导出失败，当前草稿仍已保留。'); }
+  };
   $('importProject').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
+    const importEpoch = documentEpoch;
     try {
-      if (file.size > 40 * 1024 * 1024) throw Error();
+      if (file.size > 40 * 1024 * 1024) throw Error('主题文件超过 40 MB，请减少内嵌素材后重试。');
       const raw = JSON.parse(await file.text());
-      if (raw.format !== 'control-theme' || raw.version !== 1 || !Array.isArray(raw.layers))
-        throw Error();
-      const issue = M.capacityIssue(raw);
-      if (issue) {
-        toast(issue);
-        return;
-      }
+      ThemeEditorImports.validateDocument(raw);
+      if (importEpoch !== documentEpoch) throw Error('文件读取期间主题已切换，请重新选择要导入的文件。');
+      await prepareProjectSwitch();
+      if (importEpoch !== documentEpoch) throw Error('当前主题刚收到其他修改，请确认画布后重新导入。');
       transact(() => {
         project = M.normalize(raw);
         selected.clear();
       });
+      window.dispatchEvent(new Event('control-project-detach'));
       $('fileDialog').close();
       toast('主题已导入。');
-    } catch {
-      toast('请选择有效的控制主题 JSON 文件。');
+    } catch (error) {
+      toast(error instanceof SyntaxError ? '主题 JSON 内容不完整，当前画布未替换。' : error.message || '主题导入失败，当前画布未替换。');
     }
   };
   async function readSnapshots() {
     try {
       return (
         (await ThemeEditorStorage.get(snapKey)) ||
+        (await ThemeEditorStorage.get(previousKey + '-snapshots')) ||
         (await ThemeEditorStorage.get(legacyKey + '-snapshots')) ||
         JSON.parse(localStorage.getItem(legacyKey + '-snapshots')) ||
         []
@@ -4298,7 +4653,7 @@
   };
   async function snapshotsUI() {
     $('snapshots').replaceChildren();
-    const recovered = (await ThemeEditorStorage.entries(key + '-recovery-'))
+    const recovered = [...(await ThemeEditorStorage.entries(key + '-recovery-')), ...(await ThemeEditorStorage.entries(previousKey + '-recovery-'))]
         .sort((a, b) => b.stamp - a.stamp)
         .slice(0, 10),
       snapshots = [...(await readSnapshots()), ...recovered];
@@ -4308,7 +4663,9 @@
         b = document.createElement('button');
       label.textContent = (s.recovered ? '自动保留 · ' : '') + s.time + ' · ' + s.project.name;
       b.textContent = '恢复';
-      b.onclick = () => {
+      b.onclick = async () => {
+        try { await prepareProjectSwitch(); } catch (error) { toast(error.message); return; }
+        window.dispatchEvent(new Event('control-project-detach'));
         transact(() => (project = M.normalize(s.project)));
         $('fileDialog').close();
       };
@@ -4394,6 +4751,7 @@
           });
           el.addEventListener('change', () => {
             if (el.type === 'file') return;
+            if (id === 'timerOffset') { control(id, el.value); return; }
             if (/^live[A-Z]/.test(id) || id === 'messageSource' || el.type === 'password') {
               control(id, el.type === 'checkbox' ? el.checked : el.value);
               return;
@@ -4409,6 +4767,7 @@
             update({ fields: false });
           });
           el.addEventListener('input', () => {
+            if (id === 'timerOffset') { control(id, el.value); return; }
             if (el.type === 'range') {
               if (!rangeEditing) {
                 rememberSetting(id);
@@ -4420,9 +4779,20 @@
               save();
             }
           });
+          el.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.isComposing) return;
+            if (id === 'timerOffset') {
+              e.preventDefault(); control(id, el.value);
+              clone.querySelector('[data-native-id="timerApply"]')?.click();
+            }
+          });
         } else if (el.tagName === 'BUTTON')
-          el.onclick = (e) => {
+          el.onclick = async (e) => {
             e.preventDefault();
+            if (id === 'timerApply') {
+              const offset = clone.querySelector('[data-native-id="timerOffset"]');
+              if (offset) control('timerOffset', offset.value);
+            }
             if (id.startsWith('timer')) {
               const before = frame.contentWindow.ThemeLiveBridge.timer;
               project.settings.timerElapsed = before.elapsedMs;
@@ -4430,6 +4800,7 @@
               checkpoint();
             }
             source.click();
+            if (id.startsWith('timer')) await frame.contentWindow.ThemeLiveBridge.settled;
             if (/^live(?:Connect|Disconnect|Qr)/.test(id))
               clone.querySelectorAll('input[type="password"]').forEach(input => { input.value = ''; });
             if (id.startsWith('timer')) {
@@ -4452,6 +4823,7 @@
         .querySelectorAll('form')
         .forEach((f) => f.addEventListener('submit', (e) => e.preventDefault()));
     }
+    window.dispatchEvent(new CustomEvent('editor-settings-opened', { detail: { focus } }));
     $('settingsDialog').showModal();
   }
   $('settingsOpen').onclick = () => openSettings();
@@ -4493,6 +4865,7 @@
     const u = new URL('live.html', location.href);
     u.searchParams.set('layout', 'custom');
     u.searchParams.set('v', 'editor87');
+    u.searchParams.set('chatSync', chatMode ? 'chat' : 'theme');
     if (obs) u.searchParams.set('obs', '1');
     else u.searchParams.set('pure', '1');
     u.hash = new URLSearchParams({ theme: JSON.stringify(project) }).toString();
@@ -4535,6 +4908,7 @@
     u.searchParams.set('layout', 'custom');
     u.searchParams.set('theme', id);
     u.searchParams.set('obs', '1');
+    u.searchParams.set('chatSync', chatMode ? 'chat' : 'theme');
     if ($('publishOutput').value === 'chat') {
       u.searchParams.set('output', 'chat');
       const chat = outputChat();
@@ -4605,6 +4979,44 @@
     timelineExit = false,
     timelineSeen = false,
     timelineCursor = null;
+  const previewSourceStatus = document.createElement('span');
+  previewSourceStatus.id = 'previewSourceStatus';
+  previewSourceStatus.className = 'editor-preview-source';
+  previewSourceStatus.setAttribute('role', 'status');
+  const previewSourceResume = document.createElement('button');
+  previewSourceResume.id = 'previewSourceResume';
+  previewSourceResume.type = 'button';
+  previewSourceResume.className = 'editor-preview-resume';
+  previewSourceResume.hidden = true;
+  document.querySelector('.canvas-status').prepend(previewSourceStatus, previewSourceResume);
+  function previewSourceUI(value = {}) {
+    const local = value.mode && value.mode !== 'follow', live = value.source === 'live';
+    previewSourceStatus.dataset.mode = value.mode || 'follow';
+    previewSourceStatus.textContent = local
+      ? value.mode === 'timeline' ? '画布 · 时间轴检查' : '画布 · 本地示例'
+      : live ? '画布 · 真实弹幕' : '画布 · 本地消息';
+    previewSourceStatus.title = local
+      ? '仅检查当前画布；房间连接保持，返回后恢复最新真实消息。发布状态只表示布局是否已应用。'
+      : live ? '跟随直播间真实消息；与布局的应用状态分开显示。' : '当前共用来源为本地消息。';
+    previewSourceResume.textContent = live ? '返回实时' : '结束检查';
+    previewSourceResume.hidden = !local;
+    if (!local && paused && ready) {
+      paused = false;
+      frame.contentWindow.ThemeRenderer.pause(false);
+      $('testPause').textContent = '暂停动效';
+      timelineActive = false; timelineSeen = false; timelineCursor = null;
+    }
+  }
+  previewSourceResume.onclick = () => {
+    if (!ready) return;
+    timelineActive = false; timelineSeen = false; timelineCursor = null; timelineExit = false;
+    $('timelineSeek').value = 0; $('timelineTime').textContent = '0.00 s';
+    $('timelineState').textContent = '拖动检查入场过程';
+    setPreviewPaused(false);
+    frame.contentWindow.ThemeLiveBridge?.resumeMessages();
+    previewSourceUI(frame.contentWindow.ThemeLiveBridge?.previewSource);
+  };
+  previewSourceUI();
   function timelineMessage(kind) {
     const target = selectedLayers().find((l) => l.type === kind);
     return previewRecords().findLast(
@@ -4753,6 +5165,7 @@
     if (!ready) return;
     setPreviewPaused(false);
     frame.contentWindow.ThemeRenderer.preview('editor-send', previewData());
+    frame.contentWindow.EditorMessageSync?.publish('editor-send', previewData());
   };
   $('testPause').onclick = () => setPreviewPaused(!paused);
   $('testClear').onclick = () => {
@@ -4771,6 +5184,7 @@
     timelineActive = false;
     if (paused) $('testPause').click();
     frame.contentWindow.ThemeRenderer.preview('editor-demo');
+    frame.contentWindow.EditorMessageSync?.publish('editor-demo');
   };
   $('gameExample').onchange = (e) => control('gamePreview', e.target.checked);
   document.querySelectorAll('[data-context]').forEach(
@@ -4788,6 +5202,8 @@
         }
         ({
           duplicate,
+          copy: copyLayers,
+          paste: pasteLayers,
           group,
           lock: () => contextToggle('locked'),
           hide: () => contextToggle('visible'),
@@ -4803,16 +5219,25 @@
   });
   window.addEventListener('keydown', (e) => {
     if (e.defaultPrevented) return;
-    if (e.target.closest('input,textarea,select') || document.querySelector('dialog[open]')) return;
+    if (gesture || partGesture || effectGesture) {
+      if (e.key === 'Escape') { e.preventDefault(); cancelGesture(); }
+      return;
+    }
+    if (e.target.closest('input,textarea,select,[contenteditable="true"]') || document.querySelector('dialog[open]')) return;
     const ctrl = e.ctrlKey || e.metaKey,
       k = e.key.toLowerCase();
+    if (ctrl && !e.altKey && ['c', 'v'].includes(k)) {
+      e.preventDefault(); if (k === 'c') copyLayers(); else pasteLayers(); return;
+    }
     if (!ctrl && !e.altKey && (k === ',' || k === '.')) {
       e.preventDefault();
       stepTimeline(k === '.' ? 1 : -1);
       return;
     }
     if (k === ' ') {
+      if (e.target.closest('button,summary,[role="button"],[role="tab"]')) return;
       space = true;
+      hitArea.style.cursor = 'grab';
       e.preventDefault();
     }
     if (ctrl && ['z', 'd', 'g', 's', 'a'].includes(k)) {
@@ -4871,15 +5296,14 @@
       e.preventDefault();
       const n = e.shiftKey ? 10 : 1;
       transact(() => {
-        for (const l of expanded())
-          if (canvasLayer(l) && !M.effective(project, l).locked) {
-            l.x += e.key === 'ArrowLeft' ? -n : e.key === 'ArrowRight' ? n : 0;
-            l.y += e.key === 'ArrowUp' ? -n : e.key === 'ArrowDown' ? n : 0;
-          }
+        const movable = expanded().filter(l => canvasLayer(l) && !M.effective(project, l).locked),
+          dx = ThemeCanvasWorkspace.commonDelta(movable, 'x', e.key === 'ArrowLeft' ? -n : e.key === 'ArrowRight' ? n : 0, M.positionRange),
+          dy = ThemeCanvasWorkspace.commonDelta(movable, 'y', e.key === 'ArrowUp' ? -n : e.key === 'ArrowDown' ? n : 0, M.positionRange);
+        for (const l of movable) { l.x += dx; l.y += dy; }
       });
     }
     if (k === 'f') {
-      focusSelection();
+      if (e.shiftKey) focusAll(); else focusSelection();
       return;
     }
     if (k === 'v') setTool('select');
@@ -4898,10 +5322,21 @@
     }
   });
   window.addEventListener('keyup', (e) => {
-    if (e.key === ' ') space = false;
+    if (e.key === ' ') { space = false; hitArea.style.cursor = tool === 'hand' ? 'grab' : 'default'; }
   });
   window.addEventListener('blur', () => (space = false));
   window.addEventListener('message', (e) => {
+    if (e.source === frame.contentWindow && e.origin === location.origin && e.data?.channel === 'editor-preview-source')
+      previewSourceUI(e.data);
+    if (e.source === frame.contentWindow && e.origin === location.origin && e.data?.channel === 'editor-message-status') {
+      const button = $('testForm').querySelector('button[type="submit"]');
+      if (button) button.title = e.data.connected
+        ? e.data.mirroring ? '发送到画布，并同步到本编辑器输出的 OBS 主题' : '仅在画布预览；开启测试同步后才发送到 OBS'
+        : '消息通道未连接，当前仅画布预览';
+      const scope = document.querySelector('.test-scope');
+      if (scope) { scope.textContent = e.data.mirroring && e.data.connected ? '测试消息会同步到 OBS' : '仅在编辑器预览'; scope.dataset.broadcast = String(!!e.data.mirroring && !!e.data.connected); }
+      if (e.data.error) toast(e.data.error);
+    }
     if (
       e.source === frame.contentWindow &&
       e.origin === location.origin &&
@@ -4920,26 +5355,29 @@
       if (host) url.searchParams.set('chat', host.id);
     }
     if (new URLSearchParams(location.search).has('qa')) url.searchParams.set('qa', '1');
+    if (window.WorkspaceNavigation?.navigate(url.href)) return;
     location.href = url.href;
   }
   $('editChat').onclick = () => navigateEditor(!chatMode);
   $('editChat').textContent = chatMode ? '返回直播画布' : '编辑弹幕区';
   $('compositionMode').onchange = (e) => {
-    if (e.target.value === 'feed' && !roomForLayers(chatSlots(project))) {
+    if (e.target.value === 'feed' && !roomForLayers(chatSlots(project, true))) {
       e.target.value = project.composition;
       return;
     }
     transact(() => {
       project.composition = e.target.value;
-      if (project.composition === 'feed') ensureChatContainer(project, undefined, true);
+      if (project.composition === 'feed') ensureChatContainer(project, undefined, true, true);
       selected.clear();
     });
   };
   if (chatMode) {
     $('compositionMode').hidden = true;
     document.title = '弹幕区编辑器 · CONTROL';
-    document.querySelector('.app-name').firstChild.textContent = '弹幕区编辑器 ';
-    document.querySelector('.doc-size').textContent = '组合组件';
+    const nameNode = document.querySelector('.app-name')?.firstChild,
+      sizeNode = document.querySelector('.doc-size');
+    if (nameNode) nameNode.textContent = '弹幕区编辑器 ';
+    if (sizeNode) sizeNode.textContent = '组合组件';
   }
 
   function focusSelection() {
@@ -4959,13 +5397,17 @@
     }
     focusBounds(ThemeGeometry.visualBounds(rects || items));
   }
+  function focusAll() {
+    const items = project.layers.filter(l => canvasLayer(l) && M.effective(project, l).visible);
+    focusBounds(ThemeGeometry.visualBounds([viewport(), ...items]));
+  }
   function focusBounds(bounds) {
     const r = $('canvasArea').getBoundingClientRect(),
       v = viewport();
     zoom = Math.min(
-      2,
+      ThemeCanvasWorkspace.maxZoom,
       Math.max(
-        0.1,
+        ThemeCanvasWorkspace.minZoom,
         Math.min((r.width - 120) / (bounds.w + 70), (r.height - 120) / (bounds.h + 70)),
       ),
     );
@@ -4987,9 +5429,14 @@
   const focusButton = document.createElement('button');
   focusButton.id = 'focusSelection';
   focusButton.textContent = '聚焦';
-  focusButton.title = '聚焦所选 · F';
+  focusButton.title = '聚焦所选 F · 显示全部 Shift F · 返回画面 0';
   focusButton.onclick = focusSelection;
   $('zoomIn').after(focusButton);
+  const allOption = document.createElement('option');
+  allOption.value = 'all';
+  allOption.textContent = '显示全部物件';
+  $('zoom').querySelector('option').after(allOption);
+  $('canvasHint').textContent = '空格 / 中键平移 · 滚轮移动 · Ctrl 滚轮缩放 · F 聚焦 · 0 返回画面';
   const search = document.createElement('input');
   search.id = 'layerSearch';
   search.type = 'search';
@@ -5038,8 +5485,8 @@
       return;
     }
     update();
-    if (!new URLSearchParams(location.search).has('qa'))
-      setTimeout(() => frame.contentWindow.ThemeRenderer.preview('editor-demo'), 900);
+    fit();
+    previewSourceUI(frame.contentWindow.ThemeLiveBridge?.previewSource);
   }
   frame.addEventListener('load', loaded);
   if (frame.contentWindow.ThemeRenderer) loaded();
@@ -5083,6 +5530,7 @@
   }
   syncChatPicker();
   window.ThemeEditor = {
+    draftKey: key,
     sync: draftSync,
     get historyStats() {
       return undoStore.stats;
@@ -5093,7 +5541,14 @@
     get selection() {
       return [...selected];
     },
+    get isInteracting() {
+      if (curveSession && !curveSession.surface.isConnected) curveSession = null;
+      return !!(gesture || partGesture || effectGesture || curveSession);
+    },
     partRects,
+    focusSelection,
+    focusAll,
+    get camera() { return { scale, pan: { ...pan }, viewport: { ...viewport() } }; },
     select,
     choosePart,
     add,
@@ -5114,6 +5569,19 @@
     duplicate,
     order,
     save,
+    async loadProject(value) {
+      if (value?.format !== 'control-theme' || !Array.isArray(value.layers)) throw Error('不是可打开的主题项目。');
+      const issue = M.capacityIssue(value);
+      if (issue) throw Error(issue);
+      await prepareProjectSwitch();
+      window.dispatchEvent(new Event('control-project-detach'));
+      selected.clear(); selectedPart = null; propertyTab = 'layout';
+      transact(() => (project = M.normalize(value)));
+      pan = { x: 0, y: 0 }; zoom = 'fit'; fit();
+      if (await save() === false) throw Error('项目已打开，但草稿保存失败，请导出备份。');
+      window.dispatchEvent(new Event('theme-project-loaded'));
+      return true;
+    },
     themeUrl,
     ready: () => ready,
   };
@@ -5122,4 +5590,5 @@
   propertiesUI();
   syncUndo();
   fit();
+  if (migratedDraft) toast('已接续旧版草稿；旧版本的草稿仍单独保留。');
 })();

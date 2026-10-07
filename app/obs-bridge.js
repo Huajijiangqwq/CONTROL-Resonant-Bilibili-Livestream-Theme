@@ -193,6 +193,7 @@ function createObsBridge({
   root = __dirname,
   connection = new ObsConnection(),
   model = () => require('./theme-editor-model.js'),
+  publication = null,
 } = {}) {
   let installing = false;
   const live = require('./obs-live-sync.js').createLiveSync({
@@ -201,6 +202,7 @@ function createObsBridge({
     model,
     ErrorType: ObsError,
   });
+  const managed = require('./obs-published-sync.js').createPublishedSync({ root, connection, model, publication });
   const json = (res, code, value) => {
     res.writeHead(code, {
       'Content-Type': 'application/json; charset=utf-8',
@@ -220,6 +222,7 @@ function createObsBridge({
     connection.version = version.obsVersion;
     return {
       ...connection.state(),
+      bridgeVersion: 3,
       scenes: scenes.scenes.map((s) => ({ name: s.sceneName })),
       currentScene: scenes.currentProgramSceneName,
       sources: inputs.inputs
@@ -228,7 +231,7 @@ function createObsBridge({
             i.unversionedInputKind || i.inputKind,
           ),
         )
-        .map((i) => ({ name: i.inputName, kind: i.unversionedInputKind || i.inputKind })),
+        .map((i) => ({ name: i.inputName, uuid: i.inputUuid || '', kind: i.unversionedInputKind || i.inputKind })),
       video: {
         width: video.baseWidth,
         height: video.baseHeight,
@@ -245,7 +248,14 @@ function createObsBridge({
       inputName,
       createdScene = false,
       createdInput = false;
+    const gameItems = {};
     try {
+      const channel = data.published === 'chat' ? 'chat' : data.published === 'theme' ? 'theme' : null;
+      const checkpoint = channel && publication?.snapshot(channel);
+      if (channel) {
+        if (!checkpoint?.document) throw new ObsError('APPLY_FIRST', '请先应用主题到直播，再创建 OBS 场景。');
+        data = { ...data, document: checkpoint.document, output: checkpoint.output, chatId: checkpoint.chatId, messageChannel: channel };
+      }
       if (
         data.document?.format !== 'control-theme' ||
         data.document?.version !== 1 ||
@@ -274,10 +284,11 @@ function createObsBridge({
         if (e.code !== 'EEXIST') throw e;
       }
       const url = new URL('/live.html', origin);
-      url.search = new URLSearchParams({ layout: 'custom', theme: id, obs: '1' }).toString();
+      url.search = new URLSearchParams({ layout: 'custom', theme: id, obs: '1', chatSync: data.messageChannel === 'chat' ? 'chat' : 'theme' }).toString();
+      if (channel) { url.searchParams.delete('theme'); url.searchParams.set('published', channel); }
       if (onlyChat) {
         url.searchParams.set('output', 'chat');
-        url.searchParams.set('chat', chat.id);
+        if (!channel) url.searchParams.set('chat', chat.id);
       }
       const stamp = crypto
         .createHash('sha256')
@@ -302,7 +313,8 @@ function createObsBridge({
         const items = await connection.call('GetSceneItemList', { sceneName });
         if (items.sceneItems.some((i) => i.sourceName === inputName)) {
           const settings = await connection.call('GetInputSettings', { inputName });
-          if (settings.inputSettings?.url === url.href)
+          if (settings.inputSettings?.url === url.href) {
+            if (channel) await managed.retry();
             return {
               sceneName,
               inputName,
@@ -310,6 +322,7 @@ function createObsBridge({
               reused: true,
               message: '这个主题版本已在 OBS 中，可以直接选择该场景。',
             };
+          }
         }
         const suffix = crypto.randomBytes(3).toString('hex');
         sceneName += '-' + suffix;
@@ -318,7 +331,7 @@ function createObsBridge({
       const allInputs = await connection.call('GetInputList');
       if (allInputs.inputs.some((i) => i.inputName === inputName))
         inputName += '-' + crypto.randomBytes(3).toString('hex');
-      await connection.call('CreateScene', { sceneName });
+      const created = await connection.call('CreateScene', { sceneName });
       createdScene = true;
       const scale = Math.min(info.video.width / 1920, info.video.height / 1080),
         dx = (info.video.width - 1920 * scale) / 2,
@@ -332,6 +345,7 @@ function createObsBridge({
             sourceName: source.name,
             sceneItemEnabled: true,
           });
+          gameItems[game.id] = sceneItemId;
           const angle = ((game.rotation || 0) * Math.PI) / 180,
             cos = Math.cos(angle),
             sin = Math.sin(angle);
@@ -384,12 +398,18 @@ function createObsBridge({
           boundsType: 'OBS_BOUNDS_NONE',
         },
       });
+      let managedState;
+      if (channel) {
+        const collection = await connection.call('GetSceneCollectionList');
+        managedState = await managed.register({ channel, sceneName, sceneUuid: created.sceneUuid || '', inputName, inputUuid: input.inputUuid || '', collection: collection.currentSceneCollectionName, source: source?.name || '', sourceUuid: source?.uuid || '', output: onlyChat ? 'chat' : 'scene', chatId: chat?.id || '', browserItem: input.sceneItemId, gameItems, url: url.href, revision: checkpoint.revision });
+      }
       return {
         sceneName,
         inputName,
         url: url.href,
         reused: false,
-        message: '独立场景已创建。请在 OBS 中预览并选择该场景。',
+        managed: managedState,
+        message: channel ? '已创建使用已应用主题的独立场景。后续应用会同步更新主题和游戏采集位置；节目场景保持不变。' : '独立场景已创建。请在 OBS 中预览并选择该场景。',
       };
     } catch (error) {
       const leftovers = [];
@@ -434,7 +454,7 @@ function createObsBridge({
       try {
         if (url.searchParams.has('binding')) sync = live.state(url.searchParams.get('binding'));
       } catch {}
-      json(res, 200, { service: 'hiss-obs', bridgeVersion: 2, ...connection.state(), sync });
+      json(res, 200, { service: 'hiss-obs', bridgeVersion: 3, ...connection.state(), sync, published: managed.state(url.searchParams.get('published') || undefined) });
       return;
     }
     let caller;
@@ -465,6 +485,7 @@ function createObsBridge({
       let result;
       if (url.pathname === '/api/obs/connect') {
         await connection.connect(data);
+        await managed.retry();
         result = await inventory();
       } else if (url.pathname === '/api/obs/refresh') result = await inventory();
       else if (url.pathname === '/api/obs/disconnect') {
@@ -472,9 +493,18 @@ function createObsBridge({
         result = connection.state();
       } else if (url.pathname === '/api/obs/install') result = await install(data, url.origin);
       else if (url.pathname === '/api/obs/targets') result = { targets: await live.targets() };
-      else if (url.pathname === '/api/obs/bind') result = await live.bind(data, url.origin);
+      else if (url.pathname === '/api/obs/bind') {
+        result = await live.bind(data, url.origin);
+        const owned = managed.state().targets.filter(target => target.sceneName === result.sceneName && target.inputName === result.inputName);
+        if (owned.length) {
+          const collection = await connection.call('GetSceneCollectionList');
+          for (const target of owned) if (target.collection === collection.currentSceneCollectionName) await managed.forget(target.id);
+        }
+      }
       else if (url.pathname === '/api/obs/sync') result = await live.update(data);
       else if (url.pathname === '/api/obs/pause-sync') result = await live.pause(data);
+      else if (url.pathname === '/api/obs/retry-published') result = await managed.retry();
+      else if (url.pathname === '/api/obs/forget-published') result = await managed.forget(data.id);
       else {
         json(res, 404, { error: '未知操作。' });
         return;
@@ -494,7 +524,9 @@ function createObsBridge({
     inventory,
     install,
     live,
+    managed,
     close: () => {
+      managed.close();
       live.close();
       connection.disconnect();
     },

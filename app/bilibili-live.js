@@ -4,67 +4,12 @@
   window.BilibiliLive = {
     mount(callbacks) {
       const base = window.ThemeServices?.bilibili || 'http://127.0.0.1:8793';
-      const roomRow = $('liveRoom').closest('label'), sessionRow = $('liveSession').closest('details');
-      const methodRow = document.createElement('label');
-      methodRow.className = 'field';
-      methodRow.innerHTML = '<span>接入方式</span><select id="liveMethod"><option value="web">房间号 / 扫码登录</option><option value="open" disabled>主播身份码（暂未开放）</option></select>';
-      roomRow.before(methodRow);
+      const sessionRow = $('liveSession').closest('details');
       const loginPanel = document.createElement('div');
       loginPanel.id = 'liveLoginPanel';
       sessionRow.before(loginPanel);
       const login = window.BilibiliLogin.mount(loginPanel, { base });
       sessionRow.id = 'liveManualLogin';
-      const openPanel = document.createElement('div');
-      openPanel.id = 'liveOpenPanel'; openPanel.hidden = true;
-      openPanel.innerHTML = `
-        <label class="field"><span>主播身份码</span><input id="liveIdentityCode" type="password" autocomplete="off" maxlength="256" placeholder="填写自己的主播身份码"></label>
-        <details id="liveOpenAdvanced"><summary>应用配置（首次使用）</summary>
-          <p class="hint">需要已获准使用的直播开放平台应用。应用配置完成后，日常连接只需身份码。</p>
-          <label class="field"><span>App ID</span><input id="liveOpenAppId" inputmode="numeric" maxlength="19" autocomplete="off" placeholder="开放平台应用 ID"></label>
-          <label class="field"><span>Access Key ID</span><input id="liveOpenKeyId" type="password" autocomplete="off" maxlength="256"></label>
-          <label class="field"><span>Access Key Secret</span><input id="liveOpenSecret" type="password" autocomplete="off" maxlength="512"></label>
-          <p class="hint">密钥由本机服务用于签名，不会写入主题、OBS 地址或导出文件。</p>
-        </details>
-        <label class="check"><input id="liveOpenRemember" type="checkbox" checked> 在本机加密记住配置</label>
-        <label class="check"><input id="liveOpenAuto" type="checkbox"> 启动服务后自动连接</label>
-        <div class="button-row tools"><button type="button" id="liveOpenSave">保存配置</button><button type="button" id="liveOpenForget">清除已保存配置</button></div>
-        <p class="hint" id="liveOpenSaved" role="status"></p>
-        <p class="hint"><a href="https://open-live.bilibili.com/open-manage" target="_blank" rel="noreferrer">应用管理</a> · <a href="https://play-live.bilibili.com/" target="_blank" rel="noreferrer">获取身份码</a> · <a href="https://open-live.bilibili.com/document/849b924b-b421-8586-3e5e-765a72ec3840" target="_blank" rel="noreferrer">申请与接入说明</a></p>`;
-      methodRow.after(openPanel);
-      let openSettings = {}, methodEdited = false, openSettingsLoaded = false;
-      const openMode = () => $('liveMethod').value === 'open';
-      function chooseMethod() {
-        openPanel.hidden = !openMode(); roomRow.hidden = openMode(); sessionRow.hidden = openMode(); loginPanel.hidden = openMode();
-        roomError = false; localError = ''; display();
-      }
-      function clearOpenInputs() {
-        for (const id of ['liveIdentityCode', 'liveOpenKeyId', 'liveOpenSecret']) $(id).value = '';
-      }
-      function readOpenInputs() {
-        return { code: $('liveIdentityCode').value.trim(), appId: $('liveOpenAppId').value.trim(),
-          accessKeyId: $('liveOpenKeyId').value.trim(), accessKeySecret: $('liveOpenSecret').value.trim(),
-          autoConnect: $('liveOpenRemember').checked && $('liveOpenAuto').checked };
-      }
-      function applyOpenSettings(next) {
-        if (!next) return;
-        openSettings = next;
-        if (!openSettingsLoaded) {
-          openSettingsLoaded = true;
-          if (!$('liveOpenAppId').value) $('liveOpenAppId').value = next.appId || '';
-          $('liveOpenAuto').checked = !!next.autoConnect;
-          if (next.canRemember === false) $('liveOpenRemember').checked = false;
-          if (next.available && !methodEdited && (next.saved || current?.mode === 'open')) $('liveMethod').value = 'open';
-          $('liveOpenAdvanced').open = !next.hasKeys;
-          chooseMethod();
-        }
-        $('liveIdentityCode').placeholder = next.hasCode ? '已加密保存；留空使用已保存身份码' : '填写自己的主播身份码';
-        for (const id of ['liveOpenKeyId', 'liveOpenSecret']) $(id).placeholder = next.hasKeys ? '已加密保存；留空使用原值' : '填写开放平台开发者凭据';
-        $('liveOpenSaved').textContent = next.error || (next.saved ? '已在当前 Windows 账户下加密保存。重启后可直接连接。' : '尚未保存应用配置。申请通过后，在上方填写应用凭据。');
-        $('liveOpenForget').disabled = !next.saved && !next.error;
-        const openOption = $('liveMethod').querySelector('option[value="open"]');
-        openOption.disabled = !next.available;
-        openOption.textContent = next.available ? '主播身份码（开发测试）' : '主播身份码（暂未开放）';
-      }
       let token = '',
         stream = null,
         current = null,
@@ -88,6 +33,8 @@
         versionSequence = 0;
       let sourceRevision = 0,
         deliveryGeneration = 0;
+      let serverSnapshot = null;
+      const sharedHistory = window.LiveMessageJournal?.create();
       const inFlight = new Map();
       function resetDeliveries() {
         deliveryGeneration++;
@@ -119,17 +66,36 @@
           restored
         )
           return;
+        if (serverSnapshot && String(serverSnapshot.roomId) === String(current.roomId)) {
+          restoreSnapshot(sharedHistory ? sharedHistory.snapshot() : serverSnapshot);
+          return;
+        }
+        // Newer services supply a shared snapshot; per-tab recovery is only a
+        // compatibility fallback for an older service.
+        if (serviceVersion >= 5) return;
         recovery.room(current.roomId);
         restored = true;
         const items = recovery.snapshot();
         if (items.length) callbacks.restore?.(items);
       }
+      function restoreSnapshot(value) {
+        if (!sourceName() || !bridge || current?.phase !== 'connected' || String(value.roomId) !== String(current.roomId)) return;
+        resetDeliveries();
+        recovery.room(value.roomId); recovery.clear();
+        callbacks.reset();
+        const items = Array.isArray(value.items) ? value.items.slice(-80) : [];
+        for (const item of items) recovery.remember(item);
+        restored = true;
+        callbacks.restore?.(items);
+      }
       function applyStatus(next) {
+        sharedHistory?.status(next);
         const reset =
           current?.roomInput &&
           (next.roomInput !== current.roomInput ||
             (next.phase === 'connecting' && current.phase !== 'connecting' && next.received === 0));
         if (reset) {
+          serverSnapshot = null;
           resetDeliveries();
           recovery.clear();
           restored = false;
@@ -137,6 +103,7 @@
           if (sourceName()) callbacks.reset();
         }
         if (next.phase === 'idle') {
+          serverSnapshot = null;
           resetDeliveries();
           recovery.clear();
           restored = false;
@@ -165,9 +132,7 @@
           ? '正在连接…'
           : current?.phase === 'connected'
             ? '切换 / 重新连接'
-            : openMode() ? '身份码连接' : '连接直播间';
-        $('liveOpenSave').disabled = busy;
-        $('liveMethod').disabled = busy;
+            : '连接直播间';
         $('liveStatus').textContent = roomError
           ? '先填写房间号或直播间链接。'
           : localError ||
@@ -187,7 +152,6 @@
           pieces.push('房间 ' + current.roomId);
           if (current.liveStatus !== null && current.liveStatus !== undefined) pieces.push(
             current.liveStatus === 1 ? '直播中' : current.liveStatus === 2 ? '轮播中' : '未开播');
-          if (current.mode === 'open') pieces.push('官方身份码');
           if (current.title) pieces.push(current.title);
         }
         if (current?.received) pieces.push('收到 ' + current.received + ' 条');
@@ -221,7 +185,6 @@
         }
         token = data.token;
         login.apply(data.login);
-        applyOpenSettings(data.openSettings);
         if (revision === statusRevision) applyStatus(data.status);
         else {
           bridge = true;
@@ -274,8 +237,10 @@
         stream.addEventListener('message', (event) => {
           try {
             const item = JSON.parse(event.data);
+            sharedHistory?.message(item);
             if (recovery.room(item.roomId || current?.roomId)) resetDeliveries();
             if (item.kind === 'delete') {
+              if (serverSnapshot) serverSnapshot.items = serverSnapshot.items.filter(value => value.kind !== 'sc' || !item.scIds?.includes(value.scId));
               recovery.remove(item.scIds);
               if (sourceName()) callbacks.remove(item.scIds);
               return;
@@ -283,6 +248,15 @@
             if (!sourceName()) return;
             recover();
             deliver(item);
+          } catch {}
+        });
+        stream.addEventListener('snapshot', event => {
+          try {
+            const value = JSON.parse(event.data);
+            if (!value || !Array.isArray(value.items)) return;
+            serverSnapshot = value;
+            sharedHistory?.replace(value);
+            restoreSnapshot(value);
           } catch {}
         });
         stream.addEventListener('error', () => {
@@ -302,7 +276,6 @@
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || '操作没有完成。');
-        applyOpenSettings(data.openSettings);
         if (revision === statusRevision) applyStatus(data.status);
         else {
           // The event stream may already have progressed beyond this HTTP snapshot.
@@ -315,7 +288,7 @@
       }
       async function connect() {
         const room = $('liveRoom').value.trim();
-        if (!openMode() && !room) {
+        if (!room) {
           roomError = true;
           $('liveRoom').setAttribute('aria-invalid', 'true');
           display();
@@ -330,23 +303,14 @@
         localErrorIsOffline = false;
         display();
         try {
-          if (openMode()) {
-            const value = readOpenInputs();
-            await health();
-            if (serviceVersion < 3) throw Error('请重新启动桌面客户端，使新版身份码接入服务生效。');
-            await action('/api/connect', { mode: 'open', open: value, remember: $('liveOpenRemember').checked });
-            clearOpenInputs();
-            await health();
-          } else {
-            const session = $('liveSession').value.trim();
-            $('liveSession').value = '';
-            await action('/api/connect', { mode: 'web', room, session, guest: $('liveGuest').checked });
-          }
+          const session = $('liveSession').value.trim();
+          $('liveSession').value = '';
+          await action('/api/connect', { room, session, guest: $('liveGuest').checked });
           // applyStatus resets the stream at the actual room transition. Repeating
           // that reset here could discard messages received before the HTTP reply.
           if (chosenSource === sourceRevision && !sourceName()) changeSource('live');
           try {
-            if (!openMode()) localStorage.setItem('hiss-bilibili-room', room);
+            localStorage.setItem('hiss-bilibili-room', room);
           } catch {}
         } catch (e) {
           localErrorIsOffline = !bridge;
@@ -371,31 +335,6 @@
         }
       });
       $('messageSource').addEventListener('change', () => changeSource($('messageSource').value));
-      $('liveMethod').addEventListener('change', () => { methodEdited = true; chooseMethod(); });
-      $('liveOpenRemember').addEventListener('change', () => {
-        $('liveOpenAuto').disabled = !$('liveOpenRemember').checked;
-        if (!$('liveOpenRemember').checked) $('liveOpenAuto').checked = false;
-      });
-      $('liveIdentityCode').addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.isComposing && !busy) { e.preventDefault(); connect(); }
-      });
-      for (const [id, endpoint] of [['liveOpenSave', '/api/open-settings'], ['liveOpenForget', '/api/open-forget']]) {
-        $(id).addEventListener('click', async () => {
-          busy = true; localError = ''; display();
-          try {
-            await health();
-            if (serviceVersion < 3) throw Error('请重新启动桌面客户端以更新接入服务。');
-            if (id === 'liveOpenSave' && !$('liveOpenRemember').checked) throw Error('请先勾选“在本机加密记住配置”；不保存可直接连接。');
-            await action(endpoint, id === 'liveOpenSave' ? readOpenInputs() : {});
-            clearOpenInputs();
-            if (id === 'liveOpenForget') {
-              $('liveOpenAppId').value = ''; $('liveOpenAuto').checked = false;
-              $('liveOpenAdvanced').open = true;
-            }
-          } catch (e) { localError = bridge ? e.message : '本地接入服务未启动。'; }
-          finally { busy = false; display(); }
-        });
-      }
       $('liveConnect').addEventListener('click', connect);
       $('liveDisconnect').addEventListener('click', async () => {
         busy = true;
@@ -423,7 +362,6 @@
         stream?.close();
         stream = null;
         $('liveSession').value = '';
-        clearOpenInputs();
       });
       window.addEventListener('pageshow', () => {
         listen();
@@ -435,7 +373,22 @@
       else if (requestedSource === 'simulation') recovery.select(false);
       listen();
       probe();
-      return { isLive: sourceName };
+      return {
+        isLive: sourceName,
+        restoreCurrent() {
+          if (!sourceName()) return false;
+          // Local timeline inspection does not disconnect the room or switch
+          // the global source. Reuse the journal, including intervening SC
+          // deletions and expiration, without replaying entrance animations.
+          resetDeliveries();
+          const snapshot = sharedHistory?.snapshot();
+          const items = snapshot && String(snapshot.roomId) === String(current?.roomId)
+            ? snapshot.items : recovery.snapshot();
+          callbacks.reset();
+          callbacks.restore?.(items);
+          return true;
+        },
+      };
     },
   };
 })();

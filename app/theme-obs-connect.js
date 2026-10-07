@@ -33,8 +33,9 @@
     busy = value;
     dialog.setAttribute('aria-busy', String(value));
     for (const id of ['obsRetry', 'obsRefresh', 'obsDisconnect', 'obsInstall'])
-      $(id).disabled = value || (id === 'obsInstall' && (!connected || !window.ThemeEditor));
+      $(id).disabled = value || (id === 'obsInstall' && (!connected || !window.ThemeEditor || Number(data?.bridgeVersion) < 3 || !data?.bridgeVersion));
     $('obsManualForm').querySelector('button').disabled = value;
+    $('obsInstall').textContent = window.ThemePublish?.state?.document ? '将已应用主题添加到 OBS' : '先应用主题到直播';
   }
   function state(title, detail, phase) {
     $('obsStateTitle').textContent = title;
@@ -63,7 +64,7 @@
   }
   function project() {
     if (!window.ThemeEditor) throw new Error('编辑器仍在载入，请稍后重试。');
-    return window.ThemeEditor.project;
+    return window.ThemePublish?.state?.document || window.ThemeEditor.project;
   }
   function selectedChat(doc) {
     if (location.pathname.endsWith('chat-editor.html')) {
@@ -81,6 +82,7 @@
     data = info;
     connected = info.connected;
     state('已连接 OBS', '本机连接正常 · ' + info.port, 'connected');
+    if (Number(info.bridgeVersion || 0) < 3) state('已连接 OBS · 服务需要更新', '请完全退出旧客户端并重启新版，以启用已应用主题与游戏采集同步。', 'connected');
     $('obsFirstRun').hidden = true;
     $('obsInstallPanel').hidden = false;
     $('obsDisconnect').hidden = false;
@@ -107,11 +109,13 @@
     $('obsSourceHint').textContent = info.sources.length
       ? '复用所选采集来源，在新场景内按当前主题的位置和尺寸排版。'
       : '未找到游戏、窗口或屏幕采集来源。可先只添加主题，或在 OBS 添加采集来源后刷新。';
-    const doc = window.ThemeEditor?.project,
+    const doc = window.ThemePublish?.state?.document || window.ThemeEditor?.project,
       chat = doc ? selectedChat(doc) : null;
     $('obsChatChoice').hidden = !chat;
     if (!chat) $('obsChatOutput').value = 'scene';
     else if (location.pathname.endsWith('chat-editor.html')) $('obsChatOutput').value = 'chat';
+    if (window.ThemePublish?.state?.document) $('obsChatOutput').value = window.ThemePublish.state.output;
+    $('obsChatOutput').disabled = !!window.ThemePublish?.state?.document;
     sourceState();
     window.dispatchEvent(new CustomEvent('obs-connected', { detail: info }));
   }
@@ -217,6 +221,10 @@
   };
   $('obsInstall').onclick = async () => {
     if (busy || !connected) return;
+    if (Number(data?.bridgeVersion || 0) < 3) return;
+    if (!window.ThemePublish?.state?.document) {
+      dialog.close(); document.getElementById('publish').click(); return;
+    }
     setBusy(true);
     $('obsInstalled').hidden = true;
     state('正在创建主题场景…', '保存主题、添加来源并对齐游戏区域', 'connected');
@@ -225,6 +233,8 @@
       const doc = project(),
         result = await request('install', {
           document: doc,
+          published: location.pathname.endsWith('chat-editor.html') ? 'chat' : 'theme',
+          messageChannel: location.pathname.endsWith('chat-editor.html') ? 'chat' : 'theme',
           source: $('obsGameSource').disabled ? '' : $('obsGameSource').value,
           output: $('obsChatOutput').value,
           chatId: selectedChat(doc)?.id,
@@ -233,8 +243,8 @@
       $('obsInstalled').hidden = false;
       $('obsInstalledTitle').textContent = result.reused ? '这个版本已经就绪' : '主题已安装到 OBS';
       $('obsInstalledDetail').textContent = result.message;
-      state('已连接 OBS', '主题场景已就绪，正在建立实时同步。', 'connected');
-      await window.ThemeObsLive?.bindInstalled(result);
+      state('已连接 OBS', '已应用主题与游戏采集位置会随“应用到直播”更新；草稿保持独立。', 'connected');
+      window.dispatchEvent(new CustomEvent('obs-connected', { detail: data }));
     } catch (e) {
       error(e);
     } finally {
@@ -261,6 +271,7 @@
       error(new Error('本地主题服务未响应，请检查服务后重新连接。'), true);
     }
   }, 4000);
+  window.addEventListener('theme-published', () => { if (connected && data) { render(data); setBusy(busy); } });
   window.addEventListener(
     'pagehide',
     () => {

@@ -1,4 +1,4 @@
-name: Build macOS Beta
+name: Build macOS
 on:
   workflow_dispatch:
 permissions:
@@ -25,6 +25,31 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build:mac -- --arch=${{ matrix.arch }}
+      - name: Verify packaged app starts its local service
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/control-resonant-smoke"
+          mkdir -p "$stage"
+          ditto -x -k "dist/ControlResonant-$(node -p 'require("./package.json").version')-mac-${{ matrix.arch }}.zip" "$stage"
+          bundle=$(find "$stage" -maxdepth 2 -name 'Control Resonant.app' -type d -print -quit)
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+          profile="$RUNNER_TEMP/control-resonant-profile"
+          mkdir -p "$profile"
+          printf '{"port":18791}\n' > "$profile/desktop.json"
+          "$bundle/Contents/MacOS/Electron" "--profile=$profile" > "$RUNNER_TEMP/control-resonant-startup.log" 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..45}; do
+            if curl -fsS http://127.0.0.1:18791/api/release-health > "$RUNNER_TEMP/control-resonant-health.json"; then
+              node -e 'const v=require(process.argv[1]);if(v.name!=="control-resonant-desktop")process.exit(1)' "$RUNNER_TEMP/control-resonant-health.json"
+              exit 0
+            fi
+            kill -0 "$app_pid" || { cat "$RUNNER_TEMP/control-resonant-startup.log"; exit 1; }
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/control-resonant-startup.log"
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: ControlResonant-mac-${{ matrix.arch }}

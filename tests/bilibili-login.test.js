@@ -6,8 +6,6 @@ const { createQrAuth } = require('../app/bilibili-qr-auth');
 const { startServer, BilibiliRelay } = require('../app/bilibili-server');
 const { normalize: normalizeTheme, create } = require('../app/theme-editor-model');
 const { excluded } = require('../scripts/package');
-const { config, requestBody, normalizeOpen, sign } = require('../app/bilibili-open-protocol');
-const { protect } = require('../app/bilibili-open-store');
 const QR = { code: 0, data: { url: 'https://account.bilibili.com/h5/account-h5/auth/scan-web?qrcode_key=fixture', qrcode_key: 'fixture-1234567890' } };
 const response = (body, headers = {}) => new Response(JSON.stringify(body), { headers });
 const memory = () => { let value = ''; return { save: s => { value = s; }, read: () => value, info: () => ({ saved: !!value }), clear: () => { value = ''; } }; };
@@ -75,32 +73,25 @@ test('credentials and connection controls are stripped from theme exports; packa
   assert.deepEqual(safe.settings, { streamerName: '保留' });
   for (const file of ['app/bilibili-session-credentials.enc', 'bilibili-open-credentials.enc', 'app/bilibili-session-credentials.enc.tmp']) assert(excluded(file));
 });
-test('local API rejects cross-origin, keeps identity disabled, uses saved login and supports guest/forget', async () => {
+test('local API rejects cross-origin and unsupported authentication, uses saved login and supports guest/forget', async () => {
   const store = memory(); store.save('fixture-saved');
   const original = BilibiliRelay.prototype.attempt; let observed;
   BilibiliRelay.prototype.attempt = function () { observed = this.credentials; };
-  const p = await port(), app = startServer(p, { sessionStore: store, store: { read: () => ({}), info: () => ({}), clear() {} } });
+  const p = await port(), app = startServer(p, { sessionStore: store });
   await new Promise(r => app.server.once('listening', r));
   const base = 'http://127.0.0.1:' + p;
   try {
     const health = await fetch(base + '/api/health').then(r => r.json());
-    assert.equal(health.login.saved, true); assert(!JSON.stringify(health).includes('fixture-saved'));
+    assert.equal(health.login.saved, true); assert.equal(Object.hasOwn(health, 'openSettings'), false); assert(!JSON.stringify(health).includes('fixture-saved'));
     const post = (url, body, extra = {}) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Control-Token': health.token, ...extra }, body: JSON.stringify(body) });
     assert.equal((await post('/api/login/start', {}, { Origin: 'https://evil.invalid' })).status, 403);
-    assert.equal((await post('/api/connect', { mode: 'open' })).status, 501);
+    assert.equal((await post('/api/connect', { mode: 'open' })).status, 400);
+    assert.equal((await post('/api/open-settings', {})).status, 404);
+    assert.equal((await post('/api/open-forget', {})).status, 404);
     assert.equal((await post('/api/connect', { room: '123' })).status, 202); assert.equal(observed, 'fixture-saved');
     await post('/api/connect', { room: '123', guest: true }); assert.equal(observed, '');
     await post('/api/connect', { room: '123', session: 'manual-fixture' }); assert.equal(observed, 'manual-fixture'); assert.equal(store.read(), 'fixture-saved');
-    for (const file of ['bilibili-session-store.js', 'bilibili-qr-auth.js', 'bilibili-open-store.js']) assert.equal((await fetch(base + '/' + file)).status, 404);
+    for (const file of ['bilibili-session-store.js', 'bilibili-qr-auth.js', 'bilibili-credentials.js']) assert.equal((await fetch(base + '/' + file)).status, 404);
     await post('/api/login/forget', {}); assert.equal(store.read(), ''); assert.equal(app.relay.state.phase, 'idle');
   } finally { BilibiliRelay.prototype.attempt = original; app.server.closeAllConnections(); await new Promise(r => app.server.close(r)); }
-});
-test('identity protocol preserves int64 application ids and maps official messages', () => {
-  const value = config({ appId: '9007199254740993', accessKeyId: 'fixture-id', accessKeySecret: 'fixture-secret', code: 'fixture-code' });
-  assert(requestBody('start', value).includes('9007199254740993'));
-  const headers = sign(requestBody('start', value), value, 12345, 'fixture'); assert.equal(headers.Authorization.length, 64);
-  assert(!JSON.stringify(headers).includes('fixture-secret'));
-  const events = normalizeOpen({ cmd: 'LIVE_OPEN_PLATFORM_DM', data: { open_id: 'test-open-user', uname: '调查员', msg: '欢迎来到太古屋', msg_id: 'one' } });
-  assert.equal(events[0].kind, 'normal'); assert.equal(events[0].eventId, 'open:one');
-  assert.equal(normalizeOpen({ cmd: 'UNSUPPORTED' }).length, 0);
 });
