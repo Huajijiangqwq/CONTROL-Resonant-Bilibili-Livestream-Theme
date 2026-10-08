@@ -4,26 +4,26 @@
 
 ## 当前版本与芯片选择
 
-目前已交付的是 **1.0.1** 的两种 Windows 交叉准备包，与 Windows 版共用界面、编辑器及主题代码。针对黑屏反馈的修复仍待用户 Mac 实机确认，不能据此认定所有黑屏都来自同一原因：
+**1.0.1 原生 ZIP / DMG** 请从 Build macOS 对应架构检查成功的 Actions 结果获取，并核对该次提交、报告与截图。应用与 Windows 版共用界面、编辑器及主题代码；用户设备上的音乐、系统权限与 OBS 仍需确认。此前的 Windows 交叉准备包文件名如下：
 
 - **Apple 芯片（M1 / M2 / M3 / M4 等）**：`ControlResonant-1.0.1-mac-arm64-setup.zip`。
 - **Intel Mac**：`ControlResonant-1.0.1-mac-x64-setup.zip`。
 
 目标系统为 **macOS 14.2 及以上**。Mac mini M4（包括 macOS 15.8）使用 arm64。在“关于本机”中查看芯片与系统版本。已构建的运行包包含 Electron，无需另装 Node.js 或 Python；源码启动与构建要求见下文。
 
-**本次由 Windows 交叉准备，Mac 仍待实机验证。** 两个包均以 **`-setup.zip`** 结尾，需要先在 Mac 上运行随包准备工具。随包 `BUILD-INFO.json` 如实标记 `requires-local-signing`、未公证和未实机验证；它们不是已经完成 Apple 签名的安装包。
+上述两个 **`-setup.zip`** 由 Windows 交叉准备，需要先在 Mac 上运行随包准备工具。随包 `BUILD-INFO.json` 如实标记 `requires-local-signing`、未公证和未实机验证；它们不是已经完成 Apple 签名的安装包。
 
 ## 原生 ZIP / DMG 构建状态
 
 源码已增加 Mac 原生构建：在目标架构的 Mac 上生成带临时签名的 ZIP 和 DMG，使用 `codesign` 校验应用，使用 `hdiutil verify`、只读挂载和挂载后应用签名检查验证 DMG。GitHub 工作流进一步启动打包后的应用，检查实际 GUI、本地服务并保存截图。
 
-**截至本轮整理，云端原生构建尚未实际执行，也没有已经验收通过的原生 DMG 可供下载。** 上面的现有 `-setup.zip` 与工作流未来成功后生成的文件不能混用：
+**原生分发包只从对应架构全部检查成功的运行结果获取。** 本轮已有原生验证记录，但应逐次核对提交号、任务状态与报告。`-setup.zip` 与原生分发文件的用法不同：
 
 | 包类型 | 当前状态与用法 |
 | --- | --- |
 | `*-mac-arm64-setup.zip` / `*-mac-x64-setup.zip` | 已交付的交叉准备包；首次在用户 Mac 上运行随包准备工具。 |
-| `*-mac-arm64.zip` / `*-mac-x64.zip` | 原生工作流成功后才会产生的分发 ZIP；包含在构建 Mac 上完成临时签名的 app。 |
-| `*-mac-arm64.dmg` / `*-mac-x64.dmg` | 原生工作流成功后才会产生的磁盘映像；打开后将 app 拖入 Applications。 |
+| `*-mac-arm64.zip` / `*-mac-x64.zip` | 仅在对应架构工作流检查通过后上传的分发 ZIP；包含在构建 Mac 上完成临时签名的 app。 |
+| `*-mac-arm64.dmg` / `*-mac-x64.dmg` | 仅在对应架构工作流检查通过后上传的磁盘映像；打开后将 app 拖入 Applications。 |
 
 原生包的临时签名（ad-hoc）不是 Apple Developer ID 签名或公证，下载后仍可能出现系统安全提示。GUI / 服务检查通过也不代表音乐播放器、音频权限和用户 OBS 已经验证。需要发布者先提交完整最新源码，再执行 [Mac 发布流程](Mac发布流程.md)，获取实际成功的构建产物。
 
@@ -86,7 +86,7 @@ npm run build:mac -- --arch=x64
 
 构建脚本校验固定版本的官方 Electron 下载，并保留 ZIP 中 Unix 执行权限及框架符号链接。在 Mac 上构建会对 Mach-O、嵌套 app / framework 和最外层 app 从内向外做临时签名，用 `codesign` 严格验证后生成原生 ZIP 与 DMG。DMG 经过完整性检查、只读挂载与挂载后应用检查。Windows 上默认拒绝原生构建，明确指定 `--prepare-on-mac` 才会输出带本地准备工具的 setup ZIP，不生成原生 DMG。
 
-源码包含可手动触发的 **Build macOS** 工作流，分别使用 `macos-15`（arm64）和 `macos-15-intel`（x64）。`scripts/smoke-mac.js` 对打包应用执行 GUI / 本地服务检查并记录截图；相应架构全部步骤通过后才上传分发包，失败时也会尝试上传已生成的诊断文件。工作流不自动发布 GitHub Release。本轮尚未实际运行这套云端流程；界面权限弹窗、Music / Spotify、实际系统音频和 OBS 仍需要人工实测。操作步骤与产物名称见 [Mac 发布流程](Mac发布流程.md)。
+源码包含可手动触发的 **Build macOS** 工作流，分别使用 `macos-15`（arm64）和 `macos-15-intel`（x64）。`scripts/smoke-mac.js` 对打包应用执行 GUI / 本地服务检查并记录截图；相应架构全部步骤通过后才上传分发包，失败时也会尝试上传已生成的诊断文件。工作流不自动发布 GitHub Release。具体启动检查结果以所选运行的报告和截图为准；CI 通过仅代表该次 runner 的窗口、钥匙串与本地服务路径通过，用户设备上的界面权限弹窗、Music / Spotify、实际系统音频和 OBS 仍需要人工实测。操作步骤与产物名称见 [Mac 发布流程](Mac发布流程.md)。
 
 ## 主题编辑器与弹幕编辑器
 

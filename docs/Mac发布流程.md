@@ -2,24 +2,24 @@
 
 本项目代码使用 GPT-6 Astra 生成，部分素材使用 image 生成。代码采用 MIT，原创文档及明确列出的原创素材采用 CC BY 4.0，第三方资源保留各自署名与许可。
 
-**当前状态（2026-10-08）：** 本轮新增的原生构建工作流尚未实际在 GitHub 执行。现有 1.0.1 Mac 文件是 Windows 交叉准备的 `-setup.zip`；本文说明如何取得未来检查成功的原生 ZIP / DMG，不表示已经存在可下载的原生 DMG。
+**取包原则：** 原生 ZIP / DMG 只从对应架构全部检查成功的 Actions 运行中获取。本轮已有原生验证记录，具体以所选运行的提交号、任务结果、报告和截图为准。此前提供的 `-setup.zip` 是 Windows 交叉准备包，与原生分发包不同。
 
 ## 1. 先提交完整最新源码
 
-打开 [项目仓库](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme)。本轮整理时，远端 `main` 仍为 1.0.0；**先更新完整 1.0.1 源码，再启动工作流**，不要只上传 `.github/workflows/macos.yml`。
+打开 [项目仓库](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme)。**先确认目标分支包含完整最新 1.0.1 源码，再启动工作流**，不要只上传 `.github/workflows/macos.yml`；只改版本号也不会带入启动与签名修复。
 
 1. 使用本轮完整源码 ZIP 或单独准备的 Git 提交候选，核对仓库地址正确。不要用整目录覆盖已有未提交修改的本地仓库；使用独立副本检查更清楚。
 2. 确认提交同时包含 `package.json` 的 `1.0.1`、`desktop/main.js`、`desktop/app-protocol.js`、相关启动修复、`scripts/build-mac.py`、`scripts/smoke-mac.js` 和 `.github/workflows/macos.yml`。这些只是核对点，仍应提交整份源码更新。
 3. 在 GitHub Desktop 查看 Changes，填写提交说明，提交到 `main` 后点击 **Push origin**；使用其他 Git 客户端时，完成等效的提交和推送。
 4. 回到 GitHub 的 **Code → main**，确认最新提交已出现，`package.json` 为 1.0.1，并能打开上述新增文件。若还显示 1.0.0，先完成源码更新。
 
-如果使用本轮另备的 Git 提交目录，当前分支为 `codex/mac-native-dmg`，提交已在本地准备好。可在 GitHub Desktop 用 **File → Add local repository** 添加该目录，再点击 **Publish branch**。这不会覆盖 `main`；下一步运行工作流时选择这个分支，检查通过后再决定是否合并。
+如果使用独立候选分支，例如 `codex/mac-native-dmg`，先在 GitHub Desktop 核对改动并推送该分支，再在下一步选择同一分支。记录对应提交号，避免把旧提交的通过结果当作新提交的结果；检查通过后再决定是否合并到 `main`。
 
 ## 2. 手动运行两种架构
 
 1. 登录有仓库写入权限的 GitHub 账户，进入仓库的 **Actions**。
 2. 左侧选择 **Build macOS**。
-3. 点击 **Run workflow**，Branch 选择 **main**，再点击绿色 **Run workflow**。
+3. 点击 **Run workflow**，Branch 选择包含完整最新源码的 **main**（或已推送的候选分支），再点击绿色 **Run workflow**。
 4. 打开新出现的运行记录，核对提交号是刚刚更新的源码。
 5. 查看两个任务：**Native macOS arm64** 与 **Native macOS x64**。分别使用 `macos-15` 和 `macos-15-intel`。
 
