@@ -3,8 +3,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
+    name: Native macOS ${{ matrix.arch }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -16,42 +21,57 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Confirm native architecture
+        run: node -e 'if(process.platform!=="darwin" || process.arch!==process.argv[1])process.exit(1)' '${{ matrix.arch }}'
       - run: npm run check
       - run: npm test
-      - run: npm run build:mac -- --arch=${{ matrix.arch }}
-      - name: Verify packaged app starts its local service
+      - name: Build and verify native ZIP and DMG
+        run: npm run build:mac -- --arch=${{ matrix.arch }}
+      - name: Launch packaged app and verify visible UI
+        id: smoke
         shell: bash
         run: |
           set -euo pipefail
-          stage="$RUNNER_TEMP/control-resonant-smoke"
+          stage="$RUNNER_TEMP/control-resonant-smoke-${{ matrix.arch }}"
           mkdir -p "$stage"
           ditto -x -k "dist/ControlResonant-$(node -p 'require("./package.json").version')-mac-${{ matrix.arch }}.zip" "$stage"
           bundle=$(find "$stage" -maxdepth 2 -name 'Control Resonant.app' -type d -print -quit)
+          test -n "$bundle"
           codesign --verify --deep --strict --verbose=2 "$bundle"
-          profile="$RUNNER_TEMP/control-resonant-profile"
-          mkdir -p "$profile"
-          printf '{"port":18791}\n' > "$profile/desktop.json"
-          "$bundle/Contents/MacOS/Electron" "--profile=$profile" > "$RUNNER_TEMP/control-resonant-startup.log" 2>&1 &
-          app_pid=$!
-          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
-          for attempt in {1..45}; do
-            if curl -fsS http://127.0.0.1:18791/api/release-health > "$RUNNER_TEMP/control-resonant-health.json"; then
-              node -e 'const v=require(process.argv[1]);if(v.name!=="control-resonant-desktop")process.exit(1)' "$RUNNER_TEMP/control-resonant-health.json"
-              exit 0
-            fi
-            kill -0 "$app_pid" || { cat "$RUNNER_TEMP/control-resonant-startup.log"; exit 1; }
-            sleep 1
-          done
-          cat "$RUNNER_TEMP/control-resonant-startup.log"
-          exit 1
-      - uses: actions/upload-artifact@v4
+          node scripts/smoke-mac.js --bundle "$bundle" --output "mac-verification/${{ matrix.arch }}"
+      - name: Upload verification report and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mac-verification-${{ matrix.arch }}
+          path: mac-verification/${{ matrix.arch }}/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Prepare self-contained download and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          artifacts="mac-distribution/${{ matrix.arch }}"
+          mkdir -p "$artifacts"
+          cp "dist/ControlResonant-$version-mac-${{ matrix.arch }}.zip" "$artifacts/"
+          cp "dist/ControlResonant-$version-mac-${{ matrix.arch }}.dmg" "$artifacts/"
+          (
+            cd "$artifacts"
+            shasum -a 256 ./*.zip ./*.dmg > SHA256SUMS.txt
+          )
+      - name: Upload distribution after all checks pass
+        uses: actions/upload-artifact@v4
         with:
           name: ControlResonant-mac-${{ matrix.arch }}
-          path: dist/ControlResonant-*-mac-*.zip
+          path: mac-distribution/${{ matrix.arch }}/
           if-no-files-found: error
+          retention-days: 30

@@ -24,6 +24,8 @@ function checkArchiveRefresh(refresh) {
     write('windows.zip', 'windows');
     write('mac-arm64.zip', 'arm64');
     write('mac-x64.ZIP', 'x64');
+    write('mac-arm64.dmg', 'arm64 disk image bytes');
+    write('mac-x64.DMG', 'x64 disk image bytes');
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'not an archive');
     fs.mkdirSync(path.join(dir, 'nested.zip'));
     fs.writeFileSync(path.join(dir, 'nested.zip', 'hidden.zip'), zip('nested archive'));
@@ -31,6 +33,7 @@ function checkArchiveRefresh(refresh) {
       'untrusted  windows.zip\nuntrusted  windows.zip\nuntrusted  removed.zip\n');
     verify();
     write('mac-arm64.zip', 'replacement archive');
+    write('mac-arm64.dmg', 'replacement disk image');
     fs.unlinkSync(path.join(dir, 'windows.zip'));
     expected.delete('windows.zip');
     verify();
@@ -41,11 +44,11 @@ function checkArchiveRefresh(refresh) {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-test('source and Windows checksum refresh includes every current ZIP once and rehashes replacements', () => {
+test('source and Windows checksum refresh includes current ZIP/DMG files once and rehashes replacements', () => {
   checkArchiveRefresh(refreshArchiveChecksums);
 });
 
-test('Mac checksum refresh follows the same current ZIP and replacement rules', () => {
+test('Mac checksum refresh follows the same ZIP/DMG and replacement rules', () => {
   const python = process.env.CONTROL_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
   const script = path.resolve(__dirname, '../scripts/build-mac.py');
   checkArchiveRefresh(dir => {

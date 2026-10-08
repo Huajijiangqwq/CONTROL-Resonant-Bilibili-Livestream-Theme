@@ -4,7 +4,7 @@
 
 以《Control / 控制》的视觉语言为灵感，集成直播主题、弹幕特效、音乐可视化与可视化编辑器的本地桌面工具。
 
-**1.0.0** · Windows x64 / macOS · OBS 浏览器源 · MIT / CC BY 4.0
+**1.0.1** · Windows x64 / macOS · OBS 浏览器源 · MIT / CC BY 4.0
 
 [下载与版本](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/releases) · [使用指南](docs/使用说明.md) · [更新记录](CHANGELOG.md) · [反馈问题](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/issues)
 
@@ -33,7 +33,13 @@
 
 关闭窗口会收起到托盘，OBS 仍可继续读取主题。结束使用时，在托盘选择「退出并停止本地服务」。客户端不会自行开始直播或录制。
 
-**Mac 用户**：选择 `mac-arm64-setup.zip`（Apple 芯片）或 `mac-x64-setup.zip`（Intel）。这是需要首次本机准备的应用包，完整解压后按随包 `README-macOS.md` 运行 `修复并打开.command`。它不是 Apple 公证安装包，具体步骤见 [Mac 使用说明](docs/macOS.md)。
+**Mac 用户**：目前已交付的是 `mac-arm64-setup.zip`（Apple 芯片）与 `mac-x64-setup.zip`（Intel），需完整解压并按随包 `README-macOS.md` 运行 `修复并打开.command`。源码新增了 Mac 原生 ZIP / DMG 构建与启动检查流程，**本轮云端流程尚未实际执行，当前没有已经验证通过的原生 DMG 可下载**。两条流程和签名限制见 [Mac 使用说明](docs/macOS.md)。
+
+### 1.0.1 启动修复
+
+本次针对 Mac 主窗口黑屏反馈调整了界面载入与启动顺序，并补充启动日志、明确的失败提示和有限次数的界面恢复。**修复包仍需 Mac 实机反馈，尚未确认覆盖所有黑屏原因。** Apple 芯片与 Intel 均继续使用首次需本机准备的 `-setup.zip` 包。
+
+如果签名准备成功后主窗口仍黑屏，请保留程序错误窗口中的信息，并按窗口所示路径查看 `desktop.log`；界面可操作时，也可从「关于与许可 → 打开数据文件夹」找到日志。反馈时附上版本、芯片、系统和本次启动对应的日志末段。主窗口加载失败与签名校验失败需分别排查，不必反复重签名。
 
 ### 更新与备份
 
@@ -101,11 +107,13 @@ OBS 一键接入需要启用 OBS WebSocket，可创建或绑定受管来源，�
 
 | 平台 | 当前提供的内容 |
 | --- | --- |
-| **Windows x64** | 1.0.0 桌面客户端与源码。 |
-| **macOS arm64 / x64** | 1.0.0 `-setup.zip` 应用包，首次需在 Mac 完成本机签名准备。目标系统 macOS 14.2+，尚未完成实机验证、Developer ID 签名与公证。 |
+| **Windows x64** | 1.0.1 桌面客户端与源码。 |
+| **macOS arm64 / x64** | 1.0.1 `-setup.zip` 应用包，首次需在 Mac 完成本机签名准备。目标系统 macOS 14.2+，尚未完成实机验证、Developer ID 签名与公证。 |
 | **Linux** | 页面预览与逻辑测试；未提供完整桌面服务适配。 |
 
-Mac 包与 Windows 使用同一份 1.0.0 界面和主题代码，包含 Music / Spotify 信息读取及系统音频入口；按应用音源选择、Music 封面和实际权限流程仍有限制。Mac mini M4 使用 arm64，详见 [Mac 使用说明](docs/macOS.md)。
+Mac 包与 Windows 使用同一份 1.0.1 界面和主题代码，包含 Music / Spotify 信息读取及系统音频入口；按应用音源选择、Music 封面和实际权限流程仍有限制。Mac mini M4 使用 arm64，详见 [Mac 使用说明](docs/macOS.md)。
+
+源码中的 **Build macOS** 工作流会分别在 Apple 芯片与 Intel Mac 上构建 ZIP / DMG，校验应用临时签名与磁盘映像，再启动打包后的窗口、检查本地服务并保存截图。只有相应架构检查通过才上传分发包；诊断文件即使生成也不是安装包。此流程尚未在云端执行，且不替代用户机器上的音乐、系统权限与 OBS 验证。提交完整最新源码后，可按 [Mac 发布流程](docs/Mac发布流程.md) 手动运行。
 
 WebGL 2、显卡硬件加速、消息数量和多个音乐实例会影响流畅度。60 FPS 是可选上限，不是所有设备上的性能保证。
 
@@ -145,8 +153,8 @@ npm run check                    # 语法、资源引用与发布清洁检查
 npm test                         # 本地服务与核心逻辑回归
 npm run package                  # 生成源码 ZIP 与校验清单
 npm run build:desktop            # Windows x64 客户端
-npm run build:mac -- --arch=arm64 # 在 Mac 构建 Apple 芯片版本
-npm run build:mac -- --arch=x64   # 在 Mac 构建 Intel 版本
+npm run build:mac -- --arch=arm64 # 在 Mac 构建原生 Apple 芯片 ZIP / DMG
+npm run build:mac -- --arch=x64   # 在 Mac 构建原生 Intel ZIP / DMG
 npm run stop                     # 停止本目录启动的网页服务
 ```
 

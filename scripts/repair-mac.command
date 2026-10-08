@@ -20,9 +20,12 @@ fi
 printf '将为以下应用生成本机临时签名，并移除这个应用的下载隔离标记：\n%s\n' "$bundle"
 printf '请先退出 Control Resonant。仅在确认此包来自你信任的项目下载时继续。\n'
 printf '这不是 Apple 开发者签名或公证，不会修改系统整体保护设置。\n'
-printf '输入 YES 继续，其他输入取消：'
+printf '输入 yes 继续（不区分大小写），其他输入取消：'
 read -r answer
-[[ "$answer" == YES ]] || exit 0
+case "$answer" in
+  [Yy][Ee][Ss]) ;;
+  *) printf '\n已取消，未修改应用。\n'; exit 0 ;;
+esac
 /bin/bash "$here/prepare-mac.sh" "$bundle"
 # Scoped to the verified app selected above, never a parent folder or system setting.
 /usr/bin/xattr -dr com.apple.quarantine "$bundle"

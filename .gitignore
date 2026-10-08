@@ -22,3 +22,5 @@ bilibili-*-credentials.enc*
 external-now-playing/
 credential-key.enc*
 __pycache__/
+# Checksums are regenerated for release artifacts; Git checkout can normalize line endings.
+/SHA256SUMS.txt

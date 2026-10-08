@@ -120,7 +120,7 @@ function makeZip(entries) {
 function refreshArchiveChecksums(dir) {
   // Rehash the files that exist now; previous manifests may be stale or incomplete.
   const archives = fs.readdirSync(dir, { withFileTypes: true })
-    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.zip'))
+    .filter(entry => entry.isFile() && /\.(?:zip|dmg)$/i.test(entry.name))
     .map(entry => entry.name).sort();
   const buffer = Buffer.alloc(1024 * 1024);
   const lines = archives.map(name => {

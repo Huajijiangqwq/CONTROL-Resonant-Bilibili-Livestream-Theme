@@ -1,44 +1,69 @@
 'use strict';
-const {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,shell,clipboard,utilityProcess,session,safeStorage,desktopCapturer}=require('electron');
-const path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
+const {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,shell,clipboard,utilityProcess,session,safeStorage,desktopCapturer,protocol,dialog}=require('electron');
+const path=require('node:path'),fs=require('node:fs');
 const {pageUrl,readConfig,saveConfig}=require('./core');
+const appProtocol=require('./app-protocol');
+appProtocol.registerScheme(protocol);
 const root=path.resolve(__dirname,'..');
 // Optional isolated profile for development / release checks. Never uses a production profile.
 const profile=process.argv.find(x=>x.startsWith('--profile='));
 if(profile)app.setPath('userData',path.resolve(profile.slice(10)));
 app.setAppUserModelId('ControlResonant.ThemeStudio');
 const hasLock=app.requestSingleInstanceLock();
-let win,tray,child,macAudio,exiting=false;
+let win,tray,child,macAudio,exiting=false,failureShown=false,diagnostics;
 let state={status:'starting',message:'正在启动本地服务…',base:'',port:null,version:require('../package.json').version};
 let logPath;
-function log(message){if(logPath)fs.appendFileSync(logPath,new Date().toISOString()+' '+String(message).slice(0,3000)+'\n');}
+function log(message){if(logPath)try{fs.appendFileSync(logPath,new Date().toISOString()+' '+String(message).slice(0,3000)+'\n');}catch{}}
 function publish(update){Object.assign(state,update);if(win&&!win.isDestroyed())win.webContents.send('desktop:state',state);}
 function show(){if(win){if(win.isMinimized())win.restore();win.show();win.focus();}}
+function loadShell(){
+  log('Loading packaged shell through internal protocol');
+  return win.loadURL(appProtocol.shellURL).then(()=>{
+    show();
+    // Let the loaded interface paint before a synchronous Keychain prompt.
+    setTimeout(()=>{if(!exiting&&!child)try{launchServices();}catch(error){log('Service launch failed: '+error.message);publish({status:'error',message:'本地服务启动失败，请查看日志后重试。'});}},150);
+  }).catch(error=>{log('Shell load rejected: '+error.message);void interfaceFailure('主界面未能加载。');});
+}
+async function interfaceFailure(message){
+  if(failureShown||exiting||!win||win.isDestroyed())return;
+  failureShown=true;show();
+  const canBrowse=state.status==='ready';
+  const buttons=['重新加载界面','打开日志文件夹',...(canBrowse?['在浏览器打开']:[]),'关闭提示'];
+  try{
+    const {response}=await dialog.showMessageBox(win,{type:'error',title:'Control Resonant 启动提示',message,detail:'错误已记录到 desktop.log。可以重新加载界面；仍然失败时，请将该日志的末尾发给维护者。',buttons,defaultId:1,cancelId:buttons.length-1});
+    if(response===0){failureShown=false;diagnostics?.reset();void loadShell();}
+    else if(response===1)await shell.openPath(app.getPath('userData'));
+    else if(canBrowse&&response===2)await shell.openExternal(pageUrl(state.base,'live'));
+  }catch(error){log('Startup prompt failed: '+error.message);}
+}
 function launchServices(){
   if(child)return;
   publish({status:'starting',message:'正在启动本地服务…',base:''});
   const userData=app.getPath('userData'),config=readConfig(userData);
+  log('Starting local services');
   const proc=utilityProcess.fork(path.join(__dirname,'services.js'),[],{
     cwd:root,stdio:'pipe',serviceName:'Control Resonant Local Services',
     env:{...process.env,CONTROL_DATA:path.join(userData,'data'),CONTROL_PORT:config.port?String(config.port):''},
   });
   child=proc;
-  if(process.platform==='darwin'){
-    let credentialKey='';
-    try{credentialKey=require('./credential-key').loadKey(safeStorage,userData).toString('base64');}catch{log('Keychain unavailable; credential persistence disabled.');}
-    proc.postMessage({type:'bootstrap',credentialKey});
-  }
+  proc.on('spawn',()=>log('Local services process spawned'));
   proc.stdout?.on('data',chunk=>log(chunk));proc.stderr?.on('data',chunk=>log(chunk));
   proc.on('message',message=>{
     if(message.type==='mac-audio-control'&&process.platform==='darwin'){void macAudio?.setEnabled(message.enabled);return;}
     if(message.type==='ready'){
+      log('Local services ready on port '+message.port);
       saveConfig(userData,{...config,port:message.port});
       publish({status:'ready',message:'本地服务已就绪',base:message.base,port:message.port});
-    } else if(message.type==='error')publish({status:'error',message:message.message,base:''});
+    } else if(message.type==='error'){log('Local services startup error: '+message.message);publish({status:'error',message:message.message,base:''});}
   });
   proc.on('exit',code=>{if(child===proc)child=null;void macAudio?.setEnabled(false);log('Services exit '+code);if(!exiting&&state.status!=='error')publish({status:'error',message:'本地服务已停止，请点击重试。',base:''});});
+  if(process.platform==='darwin'){
+    let credentialKey='';const began=Date.now();log('Keychain initialization begin');
+    try{credentialKey=require('./credential-key').loadKey(safeStorage,userData).toString('base64');log('Keychain initialization complete ('+(Date.now()-began)+' ms)');}catch{log('Keychain unavailable; credential persistence disabled.');}
+    if(child===proc&&!exiting){proc.postMessage({type:'bootstrap',credentialKey});log('Local services bootstrap sent');}
+  }
 }
-function trusted(event){return win&&!win.isDestroyed()&&event.sender===win.webContents&&event.senderFrame===win.webContents.mainFrame&&event.senderFrame.url===pathToFileURL(path.join(__dirname,'index.html')).href;}
+function trusted(event){return win&&!win.isDestroyed()&&event.sender===win.webContents&&event.senderFrame===win.webContents.mainFrame&&event.senderFrame.url===appProtocol.shellURL;}
 function handle(name,callback){ipcMain.handle(name,(event,...args)=>{if(!trusted(event))throw Error('未授权的窗口');return callback(...args);});}
 async function quit(){
   if(exiting)return;exiting=true;
@@ -52,6 +77,9 @@ else {
   app.whenReady().then(()=>{
     const data=app.getPath('userData');fs.mkdirSync(data,{recursive:true});
     logPath=path.join(data,'desktop.log');if(fs.existsSync(logPath)&&fs.statSync(logPath).size>2000000)fs.renameSync(logPath,logPath+'.previous');
+    log('Startup '+state.version+' '+process.platform+'/'+process.arch+' Electron '+process.versions.electron);
+    appProtocol.install(session.defaultSession,{root,kind:'shell',log});
+    app.on('child-process-gone',(_event,details)=>log('Child process exited type='+details.type+' reason='+details.reason+' code='+details.exitCode));
     // Pages receive no desktop privileges. Deny device permissions by default.
     session.defaultSession.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
     session.defaultSession.setPermissionCheckHandler(()=>false);
@@ -74,10 +102,10 @@ else {
       }catch{}
       return {action:'deny'};
     });
-    win.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(path.join(__dirname,'index.html')).href)event.preventDefault();});
+    win.webContents.on('will-navigate',(event,url)=>{if(url!==appProtocol.shellURL)event.preventDefault();});
     win.on('close',event=>{if(!exiting){event.preventDefault();win.hide();}});
     win.once('ready-to-show',show);
-    win.webContents.on('render-process-gone',(_event,details)=>{log('Renderer exited '+details.reason);win.reload();});
+    diagnostics=require('./window-diagnostics').observe(win.webContents,{log,onFailure:message=>void interfaceFailure(message),isClosing:()=>exiting,reload:()=>void loadShell()});
     const trayIcon=process.platform==='darwin'?nativeImage.createFromPath(path.join(__dirname,'trayTemplate.png')).resize({width:20,height:20}):icon;
     if(process.platform==='darwin')trayIcon.setTemplateImage(true);
     tray=new Tray(trayIcon);tray.setToolTip('Control Resonant · 直播服务运行中');
@@ -90,11 +118,8 @@ else {
     handle('desktop:data',()=>shell.openPath(data));
     handle('desktop:retry',()=>{if(!child)launchServices();return state;});
     handle('desktop:quit',quit);
-    win.webContents.on('did-fail-load',(_event,code,message)=>log('Page load failed '+code+' '+message));
-    win.webContents.on('console-message',(_event,details)=>{if(details.level==='error')log(details.message);});
-    win.loadFile(path.join(__dirname,'index.html')).then(show).catch(error=>{log(error.message);show();});
+    void loadShell();
     setTimeout(show,3000);
-    launchServices();
   }).catch(error=>{log(error.stack);app.exit(1);});
   app.on('before-quit',event=>{if(!exiting){event.preventDefault();void quit();}});
   app.on('window-all-closed',()=>{});

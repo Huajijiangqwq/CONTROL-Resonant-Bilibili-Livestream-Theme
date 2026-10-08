@@ -9,10 +9,10 @@ body{max-width:860px;margin:60px auto;padding:0 24px 64px;background:#1b1c1f;col
 </head>
 <body>
 <nav aria-label="主要功能"><a href="live.html">直播预览</a><a href="theme-editor.html">主题编辑器</a><a href="chat-editor.html">弹幕编辑器</a><a href="now-playing.html">音乐皮肤</a></nav>
-<h1>Control Resonant · 1.0.0</h1>
+<h1>Control Resonant · 1.0.1</h1>
 <p class="intro"><b>AI 生成说明</b><br>本项目代码使用 GPT-6 Astra 生成，部分素材使用 image 生成。</p>
 <p>从直播预览选择布局、连接弹幕，再复制地址到 OBS。日常使用预设主题不需要打开编辑器。</p>
-<p>版本 <code>1.0.0</code>。直播预览、主题编辑器、弹幕编辑器与音乐皮肤共用同一套工作区界面；重要主题请定期导出 JSON 备份。</p>
+<p>版本 <code>1.0.1</code>。直播预览、主题编辑器、弹幕编辑器与音乐皮肤共用同一套工作区界面；重要主题请定期导出 JSON 备份。</p>
 <nav class="toc" aria-label="使用说明目录"><a href="#start">启动与退出</a><a href="#live">直播布局</a><a href="#bilibili">弹幕接入</a><a href="#obs">OBS</a><a href="#music">音乐皮肤</a><a href="#test">消息测试</a><a href="#settings">配置与备份</a><a href="#troubleshoot">常见问题</a><a href="#editors">主题与弹幕编辑器</a></nav>
 <section id="start"><h2>1. 启动与退出</h2>
 <p>解压整个桌面包，运行 <b>ControlResonant.exe</b>。客户端启动本地服务后直接打开直播预览，无需另装 Node.js。OBS 地址请以界面复制的地址为准。</p>
@@ -41,7 +41,7 @@ body{max-width:860px;margin:60px auto;padding:0 24px 64px;background:#1b1c1f;col
 <section id="settings"><h2>7. 配置、备份与许可</h2>
 <p>设置保存在本机。桌面版从「关于与许可 → 打开数据文件夹」查看；升级前退出客户端并保留数据目录。不同浏览器或端口的页面设置可能不同。扫码凭据加密保存，不随主题导出。</p><p>编辑器的命名项目与回收站由本机项目库管理，自动草稿另行保留；保存项目不会覆盖已应用直播版本。迁移或分享时使用项目库的 JSON 导出，私人素材请自行确认后再分享。</p>
 <p>代码采用 MIT；原创文档及清单内的原创素材采用 CC BY 4.0；第三方代码、字体和游戏素材保留各自权利与声明。官方 Logo、FBC 标志及游戏示意图不属于本项目原创素材。详细清单见随包 THIRD_PARTY_NOTICES.md 和 docs/素材与许可.md。</p></section>
-<section id="troubleshoot"><h2>8. 常见问题</h2>
+<section id="troubleshoot"><h2>8. 常见问题</h2><p><b>主窗口黑屏或加载失败：</b>1.0.1 调整了界面载入和启动顺序，Mac 修复效果仍待实机反馈。请保留程序错误窗口中的信息，按所列路径查看 <code>desktop.log</code>；界面可操作时从「关于与许可 → 打开数据文件夹」找到日志。若签名准备已成功，不必反复重签名。反馈附版本、芯片、系统与本次启动的日志末段。</p>
 <ul><li><b>OBS 空白：</b>先确认直播预览与服务正常，再检查浏览器源 URL、端口、尺寸和来源显隐。</li><li><b>没有弹幕：</b>检查来源、房间号和连接状态；登录过期时重新扫码。</li><li><b>有歌名但流纹不动：</b>检查音频捕获是否开启、音源是否正确并正在发声。</li><li><b>外部服务安装失败：</b>检查 GitHub 网络和 Windows 安装确认，重试自动配置；也可从原作者发布页手动安装。</li><li><b>特效卡顿：</b>减少同时显示的高强度消息，降低帧率与效果强度，用实际 OBS 输出尺寸检查。</li></ul>
 <p>欢迎反馈问题和建议。请附版本、操作步骤和截图，提交前移除个人凭据。</p></section>
 <section id="editors" class="editor-guide"><h2>9. 主题编辑器与弹幕编辑器</h2>
@@ -65,5 +65,5 @@ body{max-width:860px;margin:60px auto;padding:0 24px 64px;background:#1b1c1f;col
 <h3>一键接入 OBS</h3>
 <p>复制固定地址不需要 WebSocket。一键创建场景时先应用主题，再在 OBS 开启 WebSocket，通过「更多 → 一键接入 OBS」连接。默认使用已应用版本：草稿修改保持本地，再次应用同步主题与受管游戏采集的位置。断连保留待同步状态，重连后更新到最新版本；切换场景集合时等待原集合恢复。高级选项保留旧的草稿直接绑定方式。</p>
 <p>游戏仍由 OBS 采集，网页特效不能直接扭曲游戏像素。程序不会开始、停止直播或录制，也不会自动切换节目场景。完整操作见随包 docs/使用说明.md 的编辑器章节。</p>
-<p>Mac 提供 1.0.0 的 arm64 / x64 应用准备包，首次请完整解压并运行随包「修复并打开.command」，具体步骤见 README-macOS.md。M4 使用 arm64。应用未经过 Apple Developer ID 签名或公证，Mac 实际运行、系统权限与 OBS 联动仍需实机验证。</p></section>
+<p>Mac 提供 1.0.1 的 arm64 / x64 应用准备包，首次请完整解压并运行随包「修复并打开.command」，具体步骤见 README-macOS.md。M4 使用 arm64。应用未经过 Apple Developer ID 签名或公证，Mac 实际运行、系统权限与 OBS 联动仍需实机验证。</p></section>
 </body></html>

@@ -1,9 +1,10 @@
 'use strict';
-const path=require('node:path'),{pathToFileURL}=require('node:url');
+const path=require('node:path'),appProtocol=require('./app-protocol');
 function createController({BrowserWindow,session,desktopCapturer,ipcMain},send){
   let win=null,wanted=false,generation=0;
-  const page=pathToFileURL(path.join(__dirname,'mac-audio.html')).href;
+  const page=appProtocol.audioURL;
   const partition=session.fromPartition('control-system-audio');
+  appProtocol.install(partition,{root:path.resolve(__dirname,'..'),kind:'audio'});
   const trusted=event=>wanted&&win&&!win.isDestroyed()&&event.sender===win.webContents&&event.senderFrame===win.webContents.mainFrame&&event.senderFrame.url===page;
   partition.setPermissionRequestHandler((contents,permission,callback)=>callback(!!wanted&&contents===win?.webContents&&['media','display-capture'].includes(permission)));
   partition.setPermissionCheckHandler((contents,permission)=>!!wanted&&contents===win?.webContents&&['media','display-capture'].includes(permission));

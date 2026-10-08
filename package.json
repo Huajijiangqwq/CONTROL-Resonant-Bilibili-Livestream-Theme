@@ -1,6 +1,6 @@
 {
   "name": "control-resonant-bilibili-theme",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Control Resonant-bilibili直播间主题：可定制的 OBS 主题、弹幕编辑器与音乐可视化。",
   "private": true,
   "license": "MIT",
