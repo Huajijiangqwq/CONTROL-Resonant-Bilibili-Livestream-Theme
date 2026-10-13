@@ -1076,9 +1076,16 @@
             if (key === 'w' || key === 'h') {
               const axis = key === 'w' ? 'x' : 'y',
                 ratio = v / l[key];
+              const uniform = children.some(child => child.type === 'music' || child.aspectLocked);
               for (const child of children) {
-                child[axis] = l[axis] + (child[axis] - l[axis]) * ratio;
-                child[key] *= ratio;
+                if (uniform) {
+                  child.x = l.x + (child.x - l.x) * ratio;
+                  child.y = l.y + (child.y - l.y) * ratio;
+                  child.w *= ratio; child.h *= ratio;
+                } else {
+                  child[axis] = l[axis] + (child[axis] - l[axis]) * ratio;
+                  child[key] *= ratio;
+                }
               }
             }
             if (key === 'rotation') {
@@ -1103,13 +1110,24 @@
             }
           }
           setAnimated(l, key, v, l);
-          if (key === 'aspectLocked' && v && M.supportsAspect(l.type)) l.aspectRatio = l.w / Math.max(2, l.h);
+          if (key === 'aspectLocked' && v && M.supportsAspect(l.type)) {
+            if (l.type === 'game') Object.assign(l, M.gameResolution(l, l.gameWidth, l.gameHeight));
+            else { l.aspectRatio = l.w / Math.max(2, l.h); Object.assign(l, M.resizeAspect(l, 'w', l.w)); }
+          }
           if (['w', 'h'].includes(key) && l.aspectLocked && M.supportsAspect(l.type))
             Object.assign(l, M.resizeAspect(l, key, v));
-          if (['game', 'music'].includes(l.type) && key === 'h')
-            l.w = v * (l.type === 'game' ? 16 / 9 : 24 / 7);
+          if (l.type === 'music' && key === 'h') l.w = v * (24 / 7);
         }
       update({ fields: false, layers: key === 'name' || key === 'visible' || key === 'locked' });
+      // Update the coupled dimension while this input still owns focus. Waiting
+      // until blur leaves a stale height when Tab focuses that height field.
+      if (!setting && ['w', 'h'].includes(key)) {
+        for (const peer of $('propertyFields').querySelectorAll('[data-prop=w],[data-prop=h]')) {
+          if (peer === input || peer === document.activeElement) continue;
+          const values = propertyTargets(peer.dataset.prop).map(item => item[peer.dataset.prop]);
+          if (values.length && values.every(value => value === values[0])) peer.value = +values[0].toFixed(3);
+        }
+      }
     };
     input.addEventListener('input', (e) => {
       if (!e.isComposing) commit();
@@ -1514,6 +1532,10 @@
     f(grid, 'locked', '锁定', 'checkbox');
     const virtual = ThemeInstances.feed(project, l);
     if (!virtual) {
+      if (items.length === 1 && l.type === 'game') {
+        grid = section('游戏分辨率与比例');
+        gameResolutionControls(grid, l);
+      }
       grid = section('变换');
       for (const [key, label, max] of [
         ['x', 'X', 7680],
@@ -1529,8 +1551,8 @@
           step: 1,
         });
       if (items.length === 1 && M.supportsAspect(l.type)) {
-        const locked = f(grid, 'aspectLocked', l.aspectLocked ? '宽高比已锁定' : '锁定宽高比', 'checkbox', { full: true });
-        locked.title = '锁定当前比例；手输宽高和拖动角点都会同比缩放。Shift 可临时锁定，按住时不会反向解锁。';
+        const locked = f(grid, 'aspectLocked', l.type === 'game' ? '窗口跟随游戏比例' : l.aspectLocked ? '宽高比已锁定' : '锁定宽高比', 'checkbox', { full: true });
+        locked.title = l.type === 'game' ? '开启时，手输宽高和拖动角点均保持所选游戏分辨率的比例；关闭后可自由调整窗口。' : '锁定当前比例；手输宽高和拖动角点都会同比缩放。Shift 可临时锁定，按住时不会反向解锁。';
       }
       if (!expanded().some((x) => ['game', 'chat'].includes(x.type)))
         f(grid, 'rotation', '旋转 °', 'number', { min: -180, max: 180 });
@@ -1734,9 +1756,9 @@
       grid.append(note);
     }
     if (['image', 'video', 'background', 'game'].includes(l.type)) {
-      grid = section('素材');
+      grid = section(l.type === 'game' ? '游戏示例素材' : '素材');
       f(grid, 'src', '素材地址', 'text', { full: true });
-      f(grid, 'fit', '填充方式', 'select', {
+      f(grid, 'fit', l.type === 'game' ? '示例图填充方式' : '填充方式', 'select', {
         full: true,
         options: [
           ['contain', '完整显示'],
@@ -2113,9 +2135,56 @@
       const p = document.createElement('p');
       p.className = 'property-note';
       p.textContent =
-        '游戏画面保持 16:9。拆出的外框和四角可自由改变比例，线宽和角线长度保持不变。示例图在 OBS 中自动隐藏。';
+        '示例图仅用于排版，比例不同会留边，在 OBS 中自动隐藏。OBS 按实际采集源等比完整显示。已拆出的独立外框需单独调整，或与游戏窗口编组缩放。';
       area.append(p);
     }
+  }
+  function gameResolutionControls(grid, l) {
+    const current = () => project.layers.find(item => item.id === l.id && item.type === 'game');
+    const locked = M.effective(project, l).locked;
+    const label = document.createElement('label'), preset = document.createElement('select');
+    label.className = 'full'; label.textContent = '游戏分辨率预设';
+    preset.setAttribute('aria-label', '游戏分辨率预设'); preset.disabled = locked;
+    for (const item of [...M.gameResolutions, { value: 'custom', label: '自定义分辨率' }]) {
+      const option = document.createElement('option'); option.value = item.value; option.textContent = item.label; preset.append(option);
+    }
+    const value = l.gameWidth + 'x' + l.gameHeight;
+    preset.value = M.gameResolutions.some(item => item.value === value) ? value : 'custom';
+    label.append(preset); grid.append(label);
+    const form = document.createElement('form'); form.className = 'fields full';
+    form.setAttribute('aria-label', '自定义游戏分辨率');
+    const inputs = [];
+    for (const [name, number] of [['游戏分辨率宽度', l.gameWidth], ['游戏分辨率高度', l.gameHeight]]) {
+      const lab = document.createElement('label'), input = document.createElement('input');
+      lab.textContent = name; input.type = 'number'; input.min = 64; input.max = 16384; input.step = 1;
+      input.required = true; input.value = number; input.disabled = locked; input.setAttribute('aria-label', name);
+      input.oninput = () => { input.setCustomValidity(''); preset.value = 'custom'; };
+      lab.append(input); form.append(lab); inputs.push(input);
+    }
+    const apply = (width, height) => {
+      const layer = current(); if (!layer || M.effective(project, layer).locked) return;
+      transact(() => Object.assign(layer, M.gameResolution(layer, width, height)));
+    };
+    preset.onchange = () => {
+      const selected = M.gameResolutions.find(item => item.value === preset.value);
+      if (selected) apply(selected.width, selected.height);
+      else inputs[0].focus();
+    };
+    const button = document.createElement('button'); button.type = 'submit'; button.className = 'wide full';
+    button.textContent = '应用分辨率'; button.disabled = locked; form.append(button);
+    form.onsubmit = event => {
+      event.preventDefault();
+      for (const input of inputs) {
+        if (!Number.isInteger(Number(input.value)) || Number(input.value) < 64 || Number(input.value) > 16384) {
+          input.setCustomValidity('请输入 64～16384 的整数。'); input.reportValidity(); return;
+        }
+      }
+      apply(Number(inputs[0].value), Number(inputs[1].value));
+    };
+    grid.append(form);
+    const note = document.createElement('p'); note.className = 'property-note full';
+    note.textContent = `游戏比例 ${M.gameRatioLabel(l)}。${l.aspectLocked ? '窗口跟随该比例。' : '窗口当前为自由比例。'}分辨率仅用于排版，不修改游戏设置；应用时宽度优先，空间不足会等比收小。`;
+    grid.append(note);
   }
   function curveEditor(grid, l) {
     const current = () => styleLayer(project.layers.find((x) => x.id === l.id)),
@@ -4049,11 +4118,11 @@
         ly = -dx * Math.sin(a) + dy * Math.cos(a);
       let w = Math.max(8, original.w + (left ? -lx : lx)),
         h = Math.max(8, original.h + (top ? -ly : ly));
-      if (e.shiftKey || g.layers.some((l) => l.type === 'game' || l.type === 'music' || l.aspectLocked))
+      if (e.shiftKey || g.layers.some((l) => l.type === 'music' || l.aspectLocked))
         h = w / (original.w / original.h);
       const maxW = Math.min(...g.layers.map(item => original.w * 1920 / item.w)),
         maxH = Math.min(...g.layers.map(item => original.h * 1080 / item.h));
-      if (e.shiftKey || g.layers.some(l => l.type === 'game' || l.type === 'music' || l.aspectLocked)) {
+      if (e.shiftKey || g.layers.some(l => l.type === 'music' || l.aspectLocked)) {
         const bounded = Math.min(1, maxW / w, maxH / h);
         w *= bounded; h *= bounded;
       } else { w = Math.min(w, maxW); h = Math.min(h, maxH); }

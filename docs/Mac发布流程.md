@@ -6,12 +6,12 @@
 
 ## 1. 先提交完整最新源码
 
-打开 [项目仓库](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme)。**先确认目标分支包含完整最新 1.0.1 源码，再启动工作流**，不要只上传 `.github/workflows/macos.yml`；只改版本号也不会带入启动与签名修复。
+打开 [项目仓库](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme)。**先确认目标分支包含完整最新 1.0.2 源码，再启动工作流**，不要只上传 `.github/workflows/macos.yml`；只改版本号也不会带入启动与签名修复。
 
 1. 使用本轮完整源码 ZIP 或单独准备的 Git 提交候选，核对仓库地址正确。不要用整目录覆盖已有未提交修改的本地仓库；使用独立副本检查更清楚。
-2. 确认提交同时包含 `package.json` 的 `1.0.1`、`desktop/main.js`、`desktop/app-protocol.js`、相关启动修复、`scripts/build-mac.py`、`scripts/smoke-mac.js` 和 `.github/workflows/macos.yml`。这些只是核对点，仍应提交整份源码更新。
+2. 确认提交同时包含 `package.json` 的 `1.0.2`、`desktop/main.js`、`desktop/app-protocol.js`、相关启动修复、`scripts/build-mac.py`、`scripts/smoke-mac.js` 和 `.github/workflows/macos.yml`。这些只是核对点，仍应提交整份源码更新。
 3. 在 GitHub Desktop 查看 Changes，填写提交说明，提交到 `main` 后点击 **Push origin**；使用其他 Git 客户端时，完成等效的提交和推送。
-4. 回到 GitHub 的 **Code → main**，确认最新提交已出现，`package.json` 为 1.0.1，并能打开上述新增文件。若还显示 1.0.0，先完成源码更新。
+4. 回到 GitHub 的 **Code → main**，确认最新提交已出现，`package.json` 为 1.0.2，并能打开上述新增文件。若还显示 1.0.0，先完成源码更新。
 
 如果使用独立候选分支，例如 `codex/mac-native-dmg`，先在 GitHub Desktop 核对改动并推送该分支，再在下一步选择同一分支。记录对应提交号，避免把旧提交的通过结果当作新提交的结果；检查通过后再决定是否合并到 `main`。
 
@@ -40,7 +40,7 @@
 | `Mac-verification-arm64` | Apple 芯片检查报告、截图或已生成的诊断文件；不是安装包。 |
 | `Mac-verification-x64` | Intel 检查报告、截图或已生成的诊断文件；不是安装包。 |
 
-GitHub 下载的是外层 Artifact ZIP，先解压，再取出其中的 `ControlResonant-1.0.1-mac-arm64.dmg` 或对应 x64 文件。分发 ZIP 文件名不带 `-setup`；原有交叉准备包带这个后缀。
+GitHub 下载的是外层 Artifact ZIP，先解压，再取出其中的 `ControlResonant-1.0.2-mac-arm64.dmg` 或对应 x64 文件。分发 ZIP 文件名不带 `-setup`；原有交叉准备包带这个后缀。
 
 当前工作流的分发 Artifact 保留 30 天，诊断 Artifact 保留 14 天。检查失败时会尝试上传诊断目录；若失败发生在诊断文件产生前，可能没有诊断 Artifact，此时查看失败步骤日志。
 

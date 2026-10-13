@@ -212,7 +212,7 @@
       $('customImageURL').value = item.src.startsWith('data:') ? '' : item.src;
     $('customGeometryHint').textContent =
       selected === 'game'
-        ? '游戏窗口锁定为 16:9；OBS 的游戏源需要同步这些尺寸。'
+        ? '游戏窗口使用当前主题设置的比例；OBS 的游戏源需要同步这些尺寸。'
         : selected === 'music'
           ? '音乐组件保持比例；显示内容沿用音乐皮肤设置。'
           : '坐标以 1920 × 1080 画布为准。拖动边框移动，拖动右下角调整大小。';
@@ -245,8 +245,8 @@
       checkpoint();
       const value = +e.target.value;
       patch(
-        (selected === 'game' || selected === 'music') && k === 'h'
-          ? { w: value * (selected === 'game' ? 16 / 9 : 24 / 7) }
+        (selected === 'music' || selected === 'game' && state.elements.game.aspectLocked !== false) && k === 'h'
+          ? { w: value * (selected === 'game' ? state.elements.game.aspectRatio : 24 / 7) }
           : { [k]: value },
       );
     });

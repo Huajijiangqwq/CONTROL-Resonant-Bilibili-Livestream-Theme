@@ -352,9 +352,52 @@
     const length = (axis === 'x' ? 1920 : 1080) * 4;
     return [-length, length];
   }
-  const supportsAspect = type => ['image', 'video', 'background', 'shape', 'border'].includes(type);
+  const supportsAspect = type => ['image', 'video', 'background', 'shape', 'border', 'game'].includes(type);
+  const gameResolutions = Object.freeze([
+    [1920, 1080, '16:9 · 1920 × 1080'],
+    [2560, 1440, '16:9 · 2560 × 1440'],
+    [3840, 2160, '16:9 · 3840 × 2160'],
+    [1280, 800, '16:10 · 1280 × 800'],
+    [1920, 1200, '16:10 · 1920 × 1200'],
+    [2560, 1600, '16:10 · 2560 × 1600'],
+    [1024, 768, '4:3 · 1024 × 768'],
+    [1440, 1080, '4:3 · 1440 × 1080'],
+    [1280, 1024, '5:4 · 1280 × 1024'],
+    [2520, 1080, '21:9 · 2520 × 1080'],
+    [2560, 1080, '超宽 · 2560 × 1080（64:27）'],
+    [3440, 1440, '超宽 · 3440 × 1440（43:18）'],
+    [3840, 1600, '超宽 · 3840 × 1600（12:5）'],
+    [5120, 1440, '32:9 · 5120 × 1440'],
+    [3840, 1200, '32:10 · 3840 × 1200'],
+    [1080, 1080, '1:1 · 1080 × 1080'],
+    [1080, 1920, '9:16 竖屏 · 1080 × 1920'],
+  ].map(([width, height, label]) => Object.freeze({ width, height, label, value: width + 'x' + height })));
+  function gameSource(value = {}) {
+    const dimension = (v, fallback) => Number.isInteger(Number(v)) && Number(v) >= 64 && Number(v) <= 16384 ? Number(v) : fallback;
+    return { gameWidth: dimension(value.gameWidth, 1920), gameHeight: dimension(value.gameHeight, 1080) };
+  }
+  function gameRatioLabel(value) {
+    const { gameWidth: w, gameHeight: h } = gameSource(value);
+    for (const [a, b] of [[16, 9], [16, 10], [4, 3], [5, 4], [21, 9], [32, 9], [32, 10], [9, 16], [1, 1]])
+      if (w * b === h * a) return a + ':' + b;
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    const d = gcd(w, h);
+    return w / d + ':' + h / d;
+  }
+  function gameResolution(value, width, height) {
+    if (![width, height].every(n => Number.isInteger(n) && n >= 64 && n <= 16384))
+      throw Error('游戏分辨率的宽高需为 64～16384 的整数。');
+    const next = layer({ ...value, type: 'game', gameWidth: width, gameHeight: height, aspectLocked: true });
+    // Switching a preset must not unexpectedly push a previously visible game
+    // outside the output. Deliberately off-canvas placements remain untouched.
+    if (value.x >= 0 && value.y >= 0 && value.x + value.w <= 1920 && value.y + value.h <= 1080) {
+      const scale = Math.min(1, (1920 - next.x) / next.w, (1080 - next.y) / next.h);
+      if (next.w * scale >= 2 && next.h * scale >= 2) { next.w *= scale; next.h *= scale; }
+    }
+    return next;
+  }
   function resizeAspect(l, axis, value) {
-    const ratio = num(l.aspectRatio, .01, 100, l.w / Math.max(2, l.h)),
+    const ratio = num(l.aspectRatio, l.type === 'game' ? 1 / 256 : .01, l.type === 'game' ? 256 : 100, l.w / Math.max(2, l.h)),
       minimum = Math.max(2, 2 * ratio), maximum = Math.min(1920, 1080 * ratio),
       w = num(axis === 'h' ? Number(value) * ratio : value, minimum, maximum, l.w);
     return { w, h: w / ratio, aspectRatio: ratio };
@@ -405,15 +448,17 @@
     const type = Object.hasOwn(labels, raw.type) ? raw.type : 'text';
     let w = num(raw.w, 2, 1920, 400),
       h = num(raw.h, 2, 1080, 90);
-    if (type === 'game' || type === 'music') {
+    if (type === 'music') {
       w = Math.min(w, 1920);
-      h = type === 'game' ? (w * 9) / 16 : (w * 7) / 24;
+      h = (w * 7) / 24;
     }
-    const aspectLocked = supportsAspect(type) && raw.aspectLocked === true,
-      aspectRatio = aspectLocked ? num(raw.aspectRatio, .01, 100, w / h) : w / h;
-    if (aspectLocked) ({ w, h } = resizeAspect({ w, h, aspectRatio }, 'w', w));
+    const game = type === 'game' ? gameSource(raw) : {},
+      aspectLocked = type === 'game' ? raw.aspectLocked !== false : supportsAspect(type) && raw.aspectLocked === true,
+      aspectRatio = aspectLocked ? type === 'game' ? game.gameWidth / game.gameHeight : num(raw.aspectRatio, .01, 100, w / h) : w / h;
+    if (aspectLocked) ({ w, h } = resizeAspect({ type, w, h, aspectRatio }, 'w', w));
     return {
       ...(supportsAspect(type) ? { aspectLocked, aspectRatio } : {}),
+      ...game,
       chatId: typeof raw.chatId === 'string' ? raw.chatId.slice(0, 71) : '',
       standalone: raw.standalone === true,
       messageFilter: (type === 'fleet'
@@ -1009,6 +1054,10 @@
     positionRange,
     supportsAspect,
     resizeAspect,
+    gameResolutions,
+    gameSource,
+    gameRatioLabel,
+    gameResolution,
     splitHiss,
     detachHeader,
     get sourceCacheStats() {

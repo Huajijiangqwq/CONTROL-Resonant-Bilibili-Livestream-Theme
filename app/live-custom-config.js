@@ -61,8 +61,16 @@
       elements[key] = rect(
         { ...supplied, enabled: supplied.enabled ?? !['timer', 'music'].includes(key) },
         r,
-        key === 'game' ? 16 / 9 : key === 'music' ? 24 / 7 : 0,
+        key === 'game' ? supplied.aspectLocked === false ? 0 : number(supplied.aspectRatio, 1 / 256, 256, 16 / 9) : key === 'music' ? 24 / 7 : 0,
       );
+      if (key === 'game') {
+        // The editor supplies the already-normalized geometry and resolution.
+        // Keep the legacy 16:9 default for old preset-only documents.
+        elements[key].aspectLocked = supplied.aspectLocked !== false;
+        elements[key].aspectRatio = elements[key].w / elements[key].h;
+        elements[key].gameWidth = number(supplied.gameWidth, 64, 16384, 1920);
+        elements[key].gameHeight = number(supplied.gameHeight, 64, 16384, 1080);
+      }
     }
     const seen = new Set(),
       extras = [];

@@ -59,7 +59,8 @@
 .theme-background>svg,.theme-background>img,.theme-background>video{position:absolute;inset:0;width:100%;height:100%}
 .scene-part-hidden{display:none!important}
 .theme-layer{position:absolute;box-sizing:border-box;pointer-events:none;transform-origin:center;overflow-wrap:anywhere;white-space:pre-wrap}
-.scene[data-editor-theme] .game-window{display:block;outline:none;box-shadow:none}
+.scene[data-editor-theme] .game-window{display:block;outline:none;box-shadow:none;aspect-ratio:auto}
+.no-game:not(.obs) .scene[data-editor-theme] .game-window:after{content:attr(data-game-label);font-size:clamp(12px,2vw,24px);letter-spacing:1px}
 .scene[data-editor-theme] .game-window .game-trace,.scene[data-editor-theme] .game-window .corner{display:block!important}
 .scene[data-editor-theme] .game-window[data-frame-visible=false] .game-trace,.scene[data-editor-theme] .game-window[data-frame-visible=false] .corner{display:none!important}
 .scene[data-editor-theme] .broadcast-header{display:flex;align-items:center;gap:24px}
@@ -75,8 +76,8 @@
 .scene[data-editor-theme] .broadcast-timer{font-size:28px}
 .scene[data-editor-theme] .game-logos{display:block!important}
 .scene[data-editor-theme] .theme-hidden{display:none!important}
-html.editor-render #gameImage{display:block!important;visibility:visible!important}
-html.editor-render.no-game #gameImage{display:none!important}
+html.editor-render :is(#gameImage,[data-native-id=gameImage]){display:block!important;visibility:visible!important}
+html.editor-render.no-game :is(#gameImage,[data-native-id=gameImage]){display:none!important}
 html.editor-render,html.editor-render body,html.editor-render .monitor{background:transparent!important}
 `;
   document.head.append(effects);
@@ -226,6 +227,9 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
     project = window.ThemeOutput ? ThemeOutput.apply(value) : M.normalize(value);
     scene.dataset.editorTheme = 'true';
     scene.dataset.composition = project.composition;
+    const primaryGame = project.layers.find(l => l.type === 'game' && M.effective(project, l).visible);
+    const caption = document.querySelector('.monitor-caption > span:first-child');
+    if (caption) caption.textContent = '1920 × 1080 ／ ' + (primaryGame ? '游戏窗口 ' + (primaryGame.aspectLocked ? M.gameRatioLabel(primaryGame) : '自由比例') : '主题输出');
     const custom = M.custom(ThemeInstances.project(project));
     if (!ThemeDocumentCompare.same(custom, lastCustom)) {
       lastCustom = custom;
@@ -319,8 +323,13 @@ html.editor-render,html.editor-render body,html.editor-render .monitor{backgroun
           : 'none';
       } else if (l.type === 'game') {
         media(el.querySelector('img'), l);
+        el.dataset.gameLabel = `${l.aspectLocked ? M.gameRatioLabel(l) : '自由比例'} 游戏窗口 · OBS 中为透明区域`;
+        el.setAttribute('aria-label', `${l.gameWidth} × ${l.gameHeight} 游戏窗口，画布尺寸 ${Math.round(l.w)} × ${Math.round(l.h)}`);
         el.dataset.frameVisible = String(l.frameVisible);
         el.style.border = `${l.frameVisible ? l.strokeWidth : 0}px solid ${l.stroke}`;
+        const trace = el.querySelector('.game-trace'), rect = trace?.querySelector('rect');
+        if (trace) trace.setAttribute('viewBox', `0 0 ${l.w + 2} ${l.h + 2}`);
+        if (rect) { rect.setAttribute('width', l.w); rect.setAttribute('height', l.h); }
         el.querySelectorAll('.corner').forEach((n) => (n.style.borderColor = l.stroke));
       } else if (l.type === 'hiss') {
         LiveMaterial.setIntensity(l.intensity);
