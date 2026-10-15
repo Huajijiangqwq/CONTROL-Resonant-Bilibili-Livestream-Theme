@@ -4,10 +4,10 @@
   const panel = document.getElementById('obsInstallPanel');
   if (!panel) return;
   const legacy = document.createElement('details');
-  const summary = document.createElement('summary'); summary.textContent = '高级：旧版场景直接跟随草稿'; legacy.append(summary);
+  const summary = document.createElement('summary'); summary.textContent = '高级：直接同步草稿'; legacy.append(summary);
   const el = document.createElement('section');
   el.className = 'obs-live-panel';
-  el.innerHTML = `<div class="obs-section-title"><h3>实时布局同步</h3><span id="obsSyncBadge">未绑定</span></div><p class="obs-note">绑定一次后，位置、尺寸、文字和特效参数会随编辑更新。切换预设时，游戏区域和主题一起过渡。</p><label>已有主题场景<select id="obsSyncTarget" aria-label="实时同步目标"><option value="">正在读取…</option></select></label><div class="obs-live-actions"><button id="obsSyncBind" type="button">绑定并开启实时同步</button><button id="obsSyncPause" type="button" hidden>暂停同步</button><button id="obsSyncResume" type="button" hidden>恢复同步</button></div><p id="obsSyncDetail" class="obs-note" role="status">新建场景保持创建时的画面；需要随编辑变化时，请选择场景并明确开启同步。</p><p class="obs-note">旧场景首次绑定会初始化一次主题来源，之后修改无需刷新。</p>`;
+  el.innerHTML = `<div class="obs-section-title"><h3>实时布局同步</h3><span id="obsSyncBadge">未绑定</span></div><label>已有主题场景<select id="obsSyncTarget" aria-label="实时同步目标"><option value="">正在读取…</option></select></label><div class="obs-live-actions"><button id="obsSyncBind" type="button">绑定并开启实时同步</button><button id="obsSyncPause" type="button" hidden>暂停同步</button><button id="obsSyncResume" type="button" hidden>恢复同步</button></div><p id="obsSyncDetail" class="obs-note" role="status">选择场景后开启同步。</p>`;
   legacy.append(el); panel.append(legacy);
   const $ = (id) => document.getElementById(id),
     key = 'theme-obs-live-' + location.pathname;

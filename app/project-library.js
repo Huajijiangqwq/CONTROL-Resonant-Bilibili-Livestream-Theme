@@ -144,7 +144,7 @@
     $('projectLibraryCount').textContent = visible.length + (trash ? ' 个可恢复项目' : ' 个项目');
     if (!visible.length) {
       const empty = el('div', 'project-empty');
-      empty.append(el('b', '', query ? '没有匹配的项目' : trash ? '回收站为空' : '把当前草稿存为第一个项目'), el('p', '', query ? '试试其他关键词。' : trash ? '移除的项目会留在这里，可随时恢复。' : '命名版本保存在本机，可独立打开、复制或导出。自动草稿会继续保留。'));
+      empty.append(el('b', '', query ? '没有匹配的项目' : trash ? '回收站为空' : '把当前草稿存为第一个项目'), el('p', '', query ? '试试其他关键词。' : trash ? '移除的项目会留在这里，可随时恢复。' : '保存主题，方便下次继续编辑。'));
       if (!query && !trash) empty.append(button('命名保存当前草稿', () => saveAs(), 'primary'));
       list.append(empty);
     }
@@ -163,7 +163,7 @@
     const panel = $('projectDetail'); panel.replaceChildren(); panel.scrollTop = 0;
     const project = projects.find(p => p.id === selected);
     if (!project) { panel.append(el('p', 'project-detail-empty', '选择项目查看详情')); return; }
-    panel.append(miniature(project, true), el('small', 'project-preview-note', '布局示意 · 下方可查看真实渲染'), el('h3', '', project.name), el('p', 'project-meta', `${project.width} × ${project.height} · ${project.layers} 个图层${project.bytes ? ' · ' + sizeLabel(project.bytes) : ''}\n${trash ? '移除' : '修改'}于 ${date(project.deletedAt || project.updatedAt)} · 版本 ${project.revision}`));
+    panel.append(miniature(project, true), el('small', 'project-preview-note', '布局预览'), el('h3', '', project.name), el('p', 'project-meta', `${project.width} × ${project.height} · ${project.layers} 个图层${project.bytes ? ' · ' + sizeLabel(project.bytes) : ''}\n${trash ? '移除' : '修改'}于 ${date(project.deletedAt || project.updatedAt)} · 版本 ${project.revision}`));
     const actions = el('div', 'project-actions');
     if (trash) actions.append(button('恢复项目', () => restoreProject(project), 'primary'));
     else {
@@ -269,7 +269,7 @@
     selected = projects.some(p => p.id === previousSelection) ? previousSelection : projects.find(p => p.id === active?.id)?.id || projects[0]?.id || null;
     renderList();
     if (result.unreadable) status(`${result.unreadable} 个项目文件无法读取，原文件已保留。`, true);
-    else if ($('projectLibraryStatus').classList.contains('error')) status('已重新连接项目库。当前草稿保持不变。');
+    else if ($('projectLibraryStatus').classList.contains('error')) status('项目库已连接。');
   }
   function openLibrary() {
     if (!$('projectLibraryDialog').open) $('projectLibraryDialog').showModal();
@@ -318,7 +318,7 @@
         setActive(record, snapshot, 'control-project-saved');
       }
       $('projectConflict').hidden = true;
-      status('已保存为「' + name + '」。自动草稿继续保留。');
+      status('已保存为「' + name + '」。');
       if ($('projectLibraryDialog').open) await refresh();
     });
   }
@@ -366,7 +366,7 @@
       const serialized = JSON.stringify({ name, document: source.document });
       if (!attempt || attempt.serialized !== serialized) attempt = { serialized, requestId: crypto.randomUUID() };
       const record = await request('', 'POST', { name, document: source.document, requestId: attempt.requestId });
-      selected = record.id; await refresh(); status('副本已建立，当前工作草稿未切换。');
+      selected = record.id; await refresh(); status('副本已保存。');
     }, '创建副本');
   }
   function download(documentValue, name) {
@@ -395,7 +395,7 @@
       window.ThemeDocumentValidation?.validate(raw, window.ThemeEditorModel);
       const record = await request('', 'POST', { name: raw.name || file.name.replace(/\.json$/i, ''), document: raw });
       trash = false; syncTabs(); selected = record.id; await refresh();
-      status('已导入项目库；选择「打开项目」开始编辑，当前草稿未替换。');
+      status('已导入，选择「打开项目」开始编辑。');
     });
   }
   function syncTabs() {
@@ -409,7 +409,7 @@
     workingDocument = editor.project;
     mounted = true;
     const dialog = el('dialog', 'project-library'); dialog.id = 'projectLibraryDialog'; dialog.setAttribute('aria-labelledby', 'projectLibraryTitle');
-    dialog.innerHTML = `<header class="project-library-head"><div><span class="project-eyebrow">本机主题</span><h2 id="projectLibraryTitle">项目库</h2></div><button type="button" id="projectLibraryClose" aria-label="关闭项目库">×</button></header><div class="project-draft"><span class="project-draft-dot"></span><div><b id="projectDraftName"></b><p>自动草稿用于继续编辑；命名项目用于留档。保存不会改变已应用的直播主题。</p></div><button type="button" id="projectSaveCopy">保存当前草稿</button></div><div class="project-library-toolbar"><div class="project-tabs"><button type="button" id="projectTabSaved" class="active">我的项目</button><button type="button" id="projectTabTrash">回收站</button></div><input id="projectSearch" type="search" placeholder="搜索项目名称" aria-label="搜索项目名称"><button type="button" id="projectLibraryRefresh">刷新</button><button type="button" id="projectImport">导入到项目库</button><input id="projectImportFile" type="file" accept=".json,application/json" hidden></div><div id="projectConflict" class="project-conflict" hidden><span>未覆盖其他窗口的修改。可以另存当前内容，或刷新后打开最新项目。</span><button type="button" id="projectConflictCopy">另存副本</button></div><div class="project-library-body"><section class="project-list-section"><div class="project-list-label"><span id="projectLibraryCount">正在读取…</span><span>最近修改</span></div><div id="projectList" class="project-list"></div></section><aside id="projectDetail" class="project-detail"></aside></div><footer id="projectLibraryStatus" class="project-library-status" role="status" aria-live="polite">项目只保存在当前电脑；导出 JSON 可备份或分享。</footer>`;
+    dialog.innerHTML = `<header class="project-library-head"><div><span class="project-eyebrow">本机主题</span><h2 id="projectLibraryTitle">项目库</h2></div><button type="button" id="projectLibraryClose" aria-label="关闭项目库">×</button></header><div class="project-draft"><span class="project-draft-dot"></span><div><b id="projectDraftName"></b><p>保存项目后，点击“应用到直播”更新输出。</p></div><button type="button" id="projectSaveCopy">保存当前草稿</button></div><div class="project-library-toolbar"><div class="project-tabs"><button type="button" id="projectTabSaved" class="active">我的项目</button><button type="button" id="projectTabTrash">回收站</button></div><input id="projectSearch" type="search" placeholder="搜索项目名称" aria-label="搜索项目名称"><button type="button" id="projectLibraryRefresh">刷新</button><button type="button" id="projectImport">导入到项目库</button><input id="projectImportFile" type="file" accept=".json,application/json" hidden></div><div id="projectConflict" class="project-conflict" hidden><span>未覆盖其他窗口的修改。可以另存当前内容，或刷新后打开最新项目。</span><button type="button" id="projectConflictCopy">另存副本</button></div><div class="project-library-body"><section class="project-list-section"><div class="project-list-label"><span id="projectLibraryCount">正在读取…</span><span>最近修改</span></div><div id="projectList" class="project-list"></div></section><aside id="projectDetail" class="project-detail"></aside></div><footer id="projectLibraryStatus" class="project-library-status" role="status" aria-live="polite">导出 JSON 可备份或分享。</footer>`;
     const nameDialogNode = el('dialog', 'project-name-dialog'); nameDialogNode.id = 'projectNameDialog'; nameDialogNode.setAttribute('aria-labelledby', 'projectNameTitle');
     nameDialogNode.innerHTML = `<form id="projectNameForm"><h2 id="projectNameTitle">命名保存</h2><label for="projectNameInput">项目名称</label><input id="projectNameInput" maxlength="80" required autocomplete="off"><p id="projectNameError" role="alert"></p><div class="project-name-actions"><button type="button" id="projectNameCancel">取消</button><button type="submit" id="projectNameSubmit" class="primary">保存项目</button></div></form>`;
     const notice = el('div', 'project-library-notice'); notice.id = 'projectLibraryNotice'; notice.setAttribute('role', 'status'); notice.hidden = true;

@@ -13,15 +13,15 @@
   dialog.innerHTML = `<div class="dialog-head"><div><span class="obs-eyebrow">LOCAL CONNECTION</span><h2 id="obsConnectTitle">接入 OBS</h2></div><button type="button" data-obs-close aria-label="关闭 OBS 接入面板">×</button></div>
   <div class="obs-body"><section class="obs-state" aria-live="polite"><span class="obs-state-dot" aria-hidden="true"></span><div><strong id="obsStateTitle">正在检测本机 OBS…</strong><p id="obsStateDetail">读取本机连接配置</p></div></section>
   <div id="obsFirstRun" class="obs-first-run" hidden><h3>首次连接：开启 OBS 的连接服务</h3><ol><li>在 OBS 顶部打开 <b>工具 → WebSocket 服务器设置</b>。</li><li>勾选 <b>启用 WebSocket 服务器</b>，保留身份验证，然后点确定。</li><li>回到这里点 <b>重新连接</b>。标准安装的端口和密码会自动读取。</li></ol></div>
-  <section class="obs-install" id="obsInstallPanel" hidden><div class="obs-section-title"><h3>把主题放进 OBS</h3><span id="obsVersion"></span></div><p class="obs-note">创建一个独立场景，主题在上，游戏画面在下。当前直播画面保持原样。</p>
+  <section class="obs-install" id="obsInstallPanel" hidden><div class="obs-section-title"><h3>把主题放进 OBS</h3><span id="obsVersion"></span></div><p class="obs-note">创建新场景，不切换当前直播画面。</p>
   <label>游戏来源<select id="obsGameSource" aria-label="OBS 游戏来源"><option value="">只添加主题</option></select></label>
   <p id="obsSourceHint" class="obs-note"></p>
   <label id="obsChatChoice" hidden>输出范围<select id="obsChatOutput" aria-label="OBS 输出范围"><option value="scene">完整主题 · 1920 × 1080</option><option value="chat">当前组合弹幕区</option></select></label>
   <div class="obs-facts"><div><span>当前 OBS 场景</span><strong id="obsCurrentScene">—</strong></div><div><span>OBS 画布</span><strong id="obsCanvasSize">—</strong></div><div><span>录制状态</span><strong id="obsRecording">—</strong></div></div>
   <button type="button" class="primary" id="obsInstall">创建 OBS 场景</button>
   <div id="obsInstalled" class="obs-installed" hidden role="status"><strong id="obsInstalledTitle"></strong><p id="obsInstalledDetail"></p><input id="obsSceneName" readonly aria-label="已创建的 OBS 场景名"><button type="button" id="obsCopyScene">复制场景名</button></div></section>
-  <details id="obsManual"><summary>手动连接 / 便携版 OBS</summary><form id="obsManualForm"><label>本机端口<input id="obsPort" type="number" min="1" max="65535" value="4455" required aria-label="OBS 端口"></label><label>连接密码<input id="obsPassword" type="password" maxlength="2048" autocomplete="off" aria-label="OBS 连接密码" placeholder="OBS 设置中显示的密码"></label><button type="submit">使用这些设置连接</button></form><p class="obs-note">密码只用于本机连接，不写入主题、分享地址或版本存档。</p></details>
-  <p class="obs-footnote">开启实时同步后，编辑会直接更新到绑定场景。游戏画面仍由 OBS 采集。</p>
+  <details id="obsManual"><summary>手动连接 / 便携版 OBS</summary><form id="obsManualForm"><label>本机端口<input id="obsPort" type="number" min="1" max="65535" value="4455" required aria-label="OBS 端口"></label><label>连接密码<input id="obsPassword" type="password" maxlength="2048" autocomplete="off" aria-label="OBS 连接密码" placeholder="OBS 设置中显示的密码"></label><button type="submit">使用这些设置连接</button></form><p class="obs-note">连接密码不会随主题导出。</p></details>
+
   </div><div class="obs-actions"><button type="button" id="obsDisconnect" hidden>断开连接</button><button type="button" id="obsRefresh" hidden>刷新来源</button><button type="button" id="obsRetry" class="primary">重新连接</button></div>`;
   document.body.append(dialog);
   const $ = (id) => document.getElementById(id);
@@ -56,7 +56,7 @@
     try {
       result = await response.json();
     } catch {
-      throw new Error('主题服务需要更新。请重新运行“启动主题预览.cmd”后重试。');
+      throw new Error('请退出并重启客户端后重试。');
     }
     if (!response.ok)
       throw Object.assign(new Error(result.error || '操作未完成，请重试。'), { code: result.code });
@@ -82,7 +82,7 @@
     data = info;
     connected = info.connected;
     state('已连接 OBS', '本机连接正常 · ' + info.port, 'connected');
-    if (Number(info.bridgeVersion || 0) < 3) state('已连接 OBS · 服务需要更新', '请完全退出旧客户端并重启新版，以启用已应用主题与游戏采集同步。', 'connected');
+    if (Number(info.bridgeVersion || 0) < 3) state('已连接 OBS · 服务需要更新', '请退出旧客户端，再启动新版。', 'connected');
     $('obsFirstRun').hidden = true;
     $('obsInstallPanel').hidden = false;
     $('obsDisconnect').hidden = false;
@@ -107,7 +107,7 @@
       if (games.length === 1) select.value = games[0].name;
     }
     $('obsSourceHint').textContent = info.sources.length
-      ? '复用所选采集来源，在新场景内按当前主题的位置和尺寸排版。'
+      ? '使用选中的游戏采集来源。'
       : '未找到游戏、窗口或屏幕采集来源。可先只添加主题，或在 OBS 添加采集来源后刷新。';
     const doc = window.ThemePublish?.state?.document || window.ThemeEditor?.project,
       chat = doc ? selectedChat(doc) : null;
@@ -243,7 +243,7 @@
       $('obsInstalled').hidden = false;
       $('obsInstalledTitle').textContent = result.reused ? '这个版本已经就绪' : '主题已安装到 OBS';
       $('obsInstalledDetail').textContent = result.message;
-      state('已连接 OBS', '已应用主题与游戏采集位置会随“应用到直播”更新；草稿保持独立。', 'connected');
+      state('已连接 OBS', '场景会随“应用到直播”更新。', 'connected');
       window.dispatchEvent(new CustomEvent('obs-connected', { detail: data }));
     } catch (e) {
       error(e);

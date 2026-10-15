@@ -16,10 +16,10 @@
     let chosenChatId = '', targetLocked = false;
     const section = document.createElement('section');
     section.className = 'publication-controls';
-    section.innerHTML = '<p id="publicationState" role="status" aria-live="polite">正在读取直播版本…</p><button type="button" id="applyLiveTheme" class="primary wide">将当前草稿应用到直播</button><label class="publication-switch"><input type="checkbox" id="publicationAuto">修改时实时应用到直播</label><p class="muted">默认只保存草稿。应用后，直播预览和 OBS 使用同一份主题，后续更新不必重新复制地址。</p><label class="publication-switch"><input type="checkbox" id="publicationMessages">测试消息同步到直播（会显示在 OBS）</label><p class="muted">默认只在画布测试。真实弹幕来源和直播计时始终共用。</p>';
+    section.innerHTML = '<p id="publicationState" role="status" aria-live="polite">正在读取直播版本…</p><button type="button" id="applyLiveTheme" class="primary wide">将当前草稿应用到直播</button><label class="publication-switch"><input type="checkbox" id="publicationAuto">修改时实时应用到直播</label><label class="publication-switch"><input type="checkbox" id="publicationMessages">测试消息同步到直播（会显示在 OBS）</label>';
     dialog.querySelector('.dialog-content').prepend(section);
     const obsSection = document.createElement('details'); obsSection.className = 'publication-obs';
-    obsSection.innerHTML = '<summary>OBS 场景同步</summary><p id="publicationObsState" role="status">读取受管场景…</p><div id="publicationObsTargets"></div><div class="button-row"><button id="publicationObsConnect" type="button">接入 OBS</button><button id="publicationObsRetry" type="button">重试场景同步</button></div><p class="muted">一键创建的场景随已应用版本更新。停止管理只解除自动更新，不删除 OBS 场景。</p>';
+    obsSection.innerHTML = '<summary>OBS 场景同步</summary><p id="publicationObsState" role="status">读取受管场景…</p><div id="publicationObsTargets"></div><div class="button-row"><button id="publicationObsConnect" type="button">接入 OBS</button><button id="publicationObsRetry" type="button">重试场景同步</button></div><p class="muted">停止管理后，OBS 场景仍会保留。</p>';
     section.append(obsSection);
     const badge = document.createElement('span'); badge.id = 'publicationBadge'; badge.className = 'publication-badge';
     badge.setAttribute('role', 'status'); $('publish').before(badge);
@@ -111,7 +111,7 @@
     function renderObs(value) {
       obsState = value;
       const rows = (value?.targets || []).filter(target => target.channel === channel), pending = rows.filter(target => target.phase !== 'synced');
-      $('publicationObsState').textContent = !rows.length ? '尚未创建受管场景；也可以直接复制固定地址手动添加。' : pending.length ? `主题已应用，${pending.length} 个 OBS 场景等待同步。` : `${rows.length} 个 OBS 场景已同步采集位置与输出尺寸。`;
+      $('publicationObsState').textContent = !rows.length ? '尚未接入 OBS 场景。' : pending.length ? `主题已应用，${pending.length} 个 OBS 场景等待同步。` : `${rows.length} 个 OBS 场景已同步采集位置与输出尺寸。`;
       $('publicationObsState').dataset.state = pending.length ? 'pending' : 'synced';
       const list = $('publicationObsTargets'); list.replaceChildren();
       for (const target of rows) {
@@ -140,12 +140,12 @@
       const isDirty = dirty();
       const obsWaiting = (obsState?.targets || []).some(target => target.channel === channel && !['synced', 'syncing'].includes(target.phase));
       const obsHint = obsWaiting ? ' · OBS 采集待同步' : '';
-      const text = error || (!connected ? '直播服务未连接' : !state?.document ? '尚未应用主题' : isDirty ? '草稿有未应用的修改' : '当前草稿与直播版本一致');
+      const text = error || (!connected ? '直播服务未连接' : !state?.document ? '尚未应用主题' : isDirty ? '草稿有未应用的修改' : '已同步到直播');
       badge.textContent = (busy ? '正在应用…' : connected && auto ? '实时应用已开启' : text) + obsHint;
       badge.title = badge.textContent;
       badge.setAttribute('aria-label', badge.textContent);
       badge.dataset.state = error ? 'error' : busy || obsWaiting ? 'pending' : isDirty ? 'draft' : 'applied';
-      $('publicationState').textContent = (busy ? '正在应用到直播…' : text) + obsHint + (state?.document ? ' · 已应用：' + state.name + ' · 修订 ' + state.revision : '');
+      $('publicationState').textContent = (busy ? '正在应用到直播…' : text) + obsHint + (state?.document ? ' · 已应用：' + state.name : '');
       $('applyLiveTheme').disabled = busy || !connected || !!chatTargetError();
       $('publicationAuto').checked = auto;
       $('publicationAuto').disabled = busy || !connected;
@@ -156,8 +156,8 @@
       const chat = shown.layers.find(l => l.type === 'chat' && l.id === state?.chatId) || shown.layers.find(l => l.type === 'chat');
       $('outputSize').textContent = onlyChat && chat ? Math.ceil(chat.w) + ' × ' + Math.ceil(chat.h) : '1920 × 1080';
       const game = shown.layers.find(l => l.type === 'game');
-      $('captureInfo').textContent = onlyChat ? '组合弹幕区按原始像素输出，尺寸更改后请同时调整 OBS 浏览器源尺寸。' : game ? `游戏源位置 ${Math.round(game.x)}, ${Math.round(game.y)}；尺寸 ${Math.round(game.w)} × ${Math.round(game.h)}。` : '当前主题没有游戏窗口。';
-      $('outputHint').textContent = onlyChat && chat ? '当前固定地址输出已应用的「' + chat.name + '」；修改目标后点击应用才会切换。' : '游戏画面仍由 OBS 游戏采集提供。编辑器里的示例只用于排版，OBS 中自动隐藏。';
+      $('captureInfo').textContent = onlyChat ? '调整尺寸后，请同步修改 OBS 浏览器源尺寸。' : game ? `游戏源位置 ${Math.round(game.x)}, ${Math.round(game.y)}；尺寸 ${Math.round(game.w)} × ${Math.round(game.h)}。` : '当前主题没有游戏窗口。';
+      $('outputHint').textContent = onlyChat && chat ? '当前固定地址输出已应用的「' + chat.name + '」；修改目标后点击应用才会切换。' : '在 OBS 中将游戏采集放在主题下方。';
     }
     function halt(reason = '') { auto = false; clearTimeout(timeout); if (reason) error = reason; render(); }
     async function performApply() {

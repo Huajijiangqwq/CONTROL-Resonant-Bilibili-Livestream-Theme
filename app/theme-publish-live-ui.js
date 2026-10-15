@@ -7,7 +7,7 @@
   const host = document.querySelector('.editor-scroll'); if (!host) return;
   if (snapshotPreview) {
     const panel = document.createElement('section'); panel.className = 'control-section publication-live-choice';
-    panel.innerHTML = '<h2>草稿快照预览</h2><p class="hint">这是打开预览时的草稿。它不会替换已应用主题，也不会随之后的编辑更新。</p><a id="snapshotBackEditor">回到编辑器</a><p><a href="live.html">查看实际直播版本</a></p>';
+    panel.innerHTML = '<h2>草稿快照预览</h2><p class="hint">此预览不会随编辑更新。</p><a id="snapshotBackEditor">回到编辑器</a><p><a href="live.html">查看实际直播版本</a></p>';
     panel.querySelector('#snapshotBackEditor').href = p.get('chatSync') === 'chat' ? 'chat-editor.html' : 'theme-editor.html';
     host.prepend(panel);
     for (const section of host.querySelectorAll('.control-section')) {
@@ -20,7 +20,7 @@
       const url = new URL(location.href); url.searchParams.delete('pure'); url.searchParams.set('obs', '1');
       document.getElementById('obsUrl').value = url.href;
       const hint = document.querySelector('#urlDialog p');
-      if (hint) hint.textContent = '此地址固定在当前草稿快照，不会随“应用到直播”更新。正式使用请从编辑器复制固定 OBS 地址。';
+      if (hint) hint.textContent = '这是静态预览地址。直播请使用编辑器的 OBS 地址。';
       try { await navigator.clipboard.writeText(url.href); } catch {}
       document.getElementById('urlDialog').showModal(); document.getElementById('obsUrl').select();
     }, true);
@@ -34,7 +34,7 @@
   $('livePublicationChoice').value = published ? channel : 'preset';
   $('livePublicationEdit').href = channel === 'chat' ? 'chat-editor.html' : 'theme-editor.html';
   $('livePublicationEdit').textContent = channel === 'chat' ? '回到弹幕编辑器' : '回到主题编辑器';
-  $('livePublicationState').textContent = published ? '正在读取已应用主题…' : '正在使用原版预设。可切换到编辑器已应用的主题；原版布局仍会保留。';
+  $('livePublicationState').textContent = published ? '正在读取已应用主题…' : '使用预设布局';
   function preference() { try { return JSON.parse(localStorage.getItem('control-live-view') || 'null'); } catch { return null; } }
   function navigate(mode) {
     if (mode === (published ? channel : 'preset')) return;
@@ -90,14 +90,14 @@
     }, true);
     window.addEventListener('theme-publication-state', event => {
       const { state, packet } = event.detail;
-      $('livePublicationState').textContent = state === 'ready' ? `${packet.name} · 修订 ${packet.revision} · 与固定 OBS 地址同步。修改布局与效果请回编辑器。` : state === 'empty' ? '尚未应用主题。请回编辑器选择“应用到直播”。' : state === 'reconnecting' ? '直播服务正在重连，保留最后一次画面。' : '主题更新失败，请检查编辑器中的应用状态。';
+      $('livePublicationState').textContent = state === 'ready' ? `${packet.name} · 已同步` : state === 'empty' ? '尚未应用主题。请回编辑器选择“应用到直播”。' : state === 'reconnecting' ? '直播服务正在重连，保留最后一次画面。' : '主题更新失败，请检查编辑器中的应用状态。';
     });
   }
   const local = document.querySelector('.local-message-section');
   if (local) {
     const label = document.createElement('label'); label.className = 'check';
     label.innerHTML = '<input type="checkbox" id="liveTestMirroring">将检查消息显示到 OBS';
-    const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '默认仅在此页检查。开启后，发送和清空也会同步到 OBS；不会向直播间发送弹幕。';
+    const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '开启后，预览消息和清空操作也会同步到 OBS。';
     local.prepend(label, hint);
     $('liveTestMirroring').onchange = event => window.EditorMessageSync?.setMirroring(event.target.checked);
   }

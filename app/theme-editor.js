@@ -1451,8 +1451,8 @@
       const p = document.createElement('p');
       p.className = 'property-note';
       p.textContent = chatMode
-        ? '选择消息组件，调整内部文字、部件、间距与特效。当前正在编辑「' + (view.name || '组合弹幕区') + '」，可在左侧组件面板添加内容。'
-        : '点击画布或左侧图层开始编辑；需要添加内容时切到组件面板。位置、样式与动效在右侧分别调整。';
+        ? '选择「' + (view.name || '组合弹幕区') + '」中的组件开始编辑。'
+        : '选择图层开始编辑。';
       area.append(p);
       const b = document.createElement('button');
       b.className = 'wide';
@@ -1575,8 +1575,8 @@
       note.className = 'property-note';
       note.textContent =
         items.length > 1
-          ? '多个值表示各图层参数不同；输入后统一修改未锁定的图层。选中单个图层可编辑文字与特效。'
-          : '分组变换作用于未锁定成员；锁定成员保持位置与尺寸。组的不透明度作为整体叠加。';
+          ? '修改将应用到所有未锁定的图层。'
+          : '锁定的图层不参与变换。';
       area.append(note);
       return;
     }
@@ -1588,7 +1588,7 @@
       f(grid, 'radius', '容器圆角', 'number', { min: 0, max: 200, full: true });
       const tip = document.createElement('p');
       tip.className = 'property-note full';
-      tip.textContent = '只改变弹幕区底板，文字和特效保持独立。设为 0 可直接叠在游戏画面上。';
+      tip.textContent = '设为 0 可隐藏底板。';
       grid.append(tip);
       grid = section('消息流容器');
       f(grid, 'paddingX', '左右内边距', 'number', { min: 0, max: 120 });
@@ -1632,7 +1632,7 @@
       instanceNote.className = 'property-note full';
       instanceNote.textContent = ThemeInstances.feed(project, l)
         ? '排列在「' + host.name + '」内，收到消息后按此模板显示。'
-        : '独立显示组件。与其他实例共享消息来源，排版、动画和特效分别设置。';
+        : '消息来源共用，样式可单独设置。';
       grid.append(instanceNote);
       if (l.type === 'fleet')
         f(grid, 'messageFilter', '接收等级', 'select', {
@@ -1670,7 +1670,7 @@
       });
       const note = document.createElement('p');
       note.className = 'property-note full';
-      note.textContent = '占位宽度包含左右留白。文字、卡片和徽记可在内部部件中单独调整。';
+      note.textContent = '在部件中调整文字、卡片和徽记。';
       grid.append(note);
       const info = document.createElement('output');
       info.className = 'part-measure full';
@@ -1752,7 +1752,7 @@
       const note = document.createElement('p');
       note.className = 'property-note full';
       note.textContent =
-        '开启后，游戏窗口保持透明；移动、改变比例或旋转背景，透明区域仍与游戏对齐。';
+        '开启后，游戏窗口区域保持透明。';
       grid.append(note);
     }
     if (['image', 'video', 'background', 'game'].includes(l.type)) {
@@ -1936,8 +1936,8 @@
       const fxNote = document.createElement('p');
       fxNote.className = 'property-note full';
       fxNote.textContent = l.fxSeeded
-        ? '关闭只旁路自定义数值；再次开启会恢复已保存的参数。属性关键帧保持独立。'
-        : '首次开启会从当前预览档位继承数值，保持原有特效。通用样式会影响所有未独立设置的档位。';
+        ? '关闭后使用档位默认效果。'
+        : '未单独设置的档位使用通用样式。';
       grid.append(fxNote);
       if (l.fxCustom) {
         for (const [key, label, max] of [
@@ -1972,10 +1972,6 @@
       f(grid, 'speed', '流速', 'number', { min: 0.1, max: 3, step: 0.1 });
       f(grid, 'audioGain', '音频响应', 'number', { min: 0, max: 3, step: 0.1 });
       f(grid, 'flowColor', '流纹颜色', 'color');
-      const note = document.createElement('p');
-      note.className = 'property-note full';
-      note.textContent = '流场可以伸出画布，画布只显示其中可见部分。调整范围不会拉伸流纹。';
-      grid.append(note);
       mountTracks(area, l);
     }
     if (l.type === 'hiss') {
@@ -1996,11 +1992,6 @@
         });
       };
       grid.append(b);
-      const note = document.createElement('p');
-      note.className = 'property-note full';
-      note.textContent =
-        '按当前游戏位置和图层变换拆出发射点，保留亮度、混合与分组。拆出后可分别调节范围与材质，流纹按实际像素生成。';
-      grid.append(note);
     }
     if (ThemeSceneComponents.schema[l.type]) {
       grid = section(
@@ -2022,8 +2013,8 @@
       tip.className = 'property-note full';
       tip.textContent =
         l.type === 'logos'
-          ? '中英文尺寸和间距分别设置。调整容器不拉伸字标，保留官方比例和原有显现动效。'
-          : '内部字号、留白和显示项独立调整。改变容器宽高不会缩放文字；原有计时和动效继续运行。';
+          ? '调整容器不缩放字标。'
+          : '调整容器不缩放文字。';
       grid.append(tip);
       if (l.type === 'logos') {
         const metrics = ThemeSceneComponents.logoMetrics(l),
@@ -2075,7 +2066,7 @@
           project.layers.splice(project.layers.indexOf(l), 1, ...generated);
           selected = new Set([generated[0].id]);
         });
-        toast('已拆为独立图层，可以分别移动、调节和隐藏；支持撤销。');
+        toast('已拆分为独立图层。');
       };
       area.append(button);
     }
@@ -2135,7 +2126,7 @@
       const p = document.createElement('p');
       p.className = 'property-note';
       p.textContent =
-        '示例图仅用于排版，比例不同会留边，在 OBS 中自动隐藏。OBS 按实际采集源等比完整显示。已拆出的独立外框需单独调整，或与游戏窗口编组缩放。';
+        '示例图不输出到 OBS。';
       area.append(p);
     }
   }
@@ -2183,7 +2174,7 @@
     };
     grid.append(form);
     const note = document.createElement('p'); note.className = 'property-note full';
-    note.textContent = `游戏比例 ${M.gameRatioLabel(l)}。${l.aspectLocked ? '窗口跟随该比例。' : '窗口当前为自由比例。'}分辨率仅用于排版，不修改游戏设置；应用时宽度优先，空间不足会等比收小。`;
+    note.textContent = `比例 ${M.gameRatioLabel(l)} · ${l.aspectLocked ? '已锁定' : '自由调整'}`;
     grid.append(note);
   }
   function curveEditor(grid, l) {
@@ -3271,7 +3262,7 @@
         });
         const tip = document.createElement('p');
         tip.className = 'property-note full';
-        tip.textContent = '0 保持原版行数；新增文字不限制行数。调整宽度会重新换行，字号保持不变。';
+        tip.textContent = '设为 0 使用默认行数。';
         grid.append(tip);
       }
       if (!(l.type === 'fleet' && ['title', 'name'].includes(p.kind)))
@@ -3424,7 +3415,7 @@
         const note = document.createElement('p');
         note.className = 'property-note full';
         note.textContent =
-          '字段随真实消息更新，文字仍使用本组件原有的显影和退场。关闭自定义可恢复原版文案。';
+          '字段会自动填入消息内容。';
         grid.append(note);
       }
     }
@@ -4953,8 +4944,8 @@
     $('outputSize').textContent =
       only && chat ? Math.ceil(chat.w) + ' × ' + Math.ceil(chat.h) : '1920 × 1080';
     $('outputHint').textContent = only
-      ? '只输出组合弹幕区和附属装饰，保留消息、材质与动画；场景里的其他元素仍保存在主题中。'
-      : '游戏画面仍由 OBS 游戏采集提供。编辑器里的游戏示例只用于排版，OBS 中自动隐藏。';
+      ? '仅输出选中的组合弹幕区。'
+      : '在 OBS 中将游戏采集放在主题下方。';
     const game = project.layers.find((l) => l.type === 'game');
     $('captureInfo').textContent = only
       ? chat && !M.effective(project, chat).visible
@@ -5065,7 +5056,7 @@
       ? value.mode === 'timeline' ? '画布 · 时间轴检查' : '画布 · 本地示例'
       : live ? '画布 · 真实弹幕' : '画布 · 本地消息';
     previewSourceStatus.title = local
-      ? '仅检查当前画布；房间连接保持，返回后恢复最新真实消息。发布状态只表示布局是否已应用。'
+      ? '预览结束后可返回实时弹幕。'
       : live ? '跟随直播间真实消息；与布局的应用状态分开显示。' : '当前共用来源为本地消息。';
     previewSourceResume.textContent = live ? '返回实时' : '结束检查';
     previewSourceResume.hidden = !local;

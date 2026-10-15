@@ -35,7 +35,7 @@
     for(const [id,b]of buttons){b.setAttribute('aria-selected',String(id===active));b.tabIndex=id===active?0:-1;}
     const available=sections.filter(s=>category(s)===active&&!s.hidden&&s.style.display!=='none');
     note.hidden=available.length>0;
-    note.textContent=live&&params.has('published')?'此画面来自编辑器。布局与外观请在编辑器调整，再应用到直播。':'当前分组没有可调整的项目。';
+    note.textContent=live&&params.has('published')?'请在编辑器中调整画面。':'当前分组没有可调整的项目。';
     try{sessionStorage.setItem(key,active);}catch{}
   }
   nav.setAttribute('role','tablist');

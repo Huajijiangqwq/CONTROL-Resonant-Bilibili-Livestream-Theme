@@ -13,14 +13,13 @@
       const content=dialog.querySelector('.dialog-content'), output=$('publishOutput').closest('label');
       const apply=$('applyLiveTheme'), current=$('publicationState'), obs=dialog.querySelector('.publication-obs');
       const automatic=document.createElement('details'), autoTitle=document.createElement('summary');
-      automatic.className='publication-advanced';autoTitle.textContent='实时联动与测试';automatic.append(autoTitle);
+      automatic.className='publication-advanced';autoTitle.textContent='同步选项';automatic.append(autoTitle);
       for (const label of section.querySelectorAll('.publication-switch')) {
         const description=label.nextElementSibling?.matches('p')?label.nextElementSibling:null;
         automatic.append(label);if(description)automatic.append(description);
       }
       const chatTarget=$('publicationChatTarget');
       section.replaceChildren(current,output,...(chatTarget?[chatTarget]:[]),apply);
-      const caption=document.createElement('p');caption.className='publication-explainer';caption.textContent='应用更新直播预览和固定 OBS 地址；保存项目用于留档。';section.append(caption);
       const actions=document.createElement('div');actions.className='publication-output-actions';
       actions.append($('copyUrl'),$('openLive'));
       const manual=document.createElement('details'), title=document.createElement('summary');
@@ -32,7 +31,7 @@
       section.after(actions);
       if(preview)actions.after(preview);
       content.append(manual,automatic);if(obs)content.append(obs);
-      function labelState(){const active=$('publicationAuto').checked||$('publicationMessages').checked;autoTitle.textContent='实时联动与测试'+(active?' · 已开启':'');automatic.dataset.active=String(active);}
+      function labelState(){const active=$('publicationAuto').checked||$('publicationMessages').checked;autoTitle.textContent='同步选项'+(active?' · 已开启':'');automatic.dataset.active=String(active);}
       new MutationObserver(labelState).observe(current,{childList:true,subtree:true});labelState();
       return true;
     }

@@ -123,12 +123,12 @@
         : mode === 'classic'
           ? '完整品牌区与宽弹幕栏。'
           : mode === 'game'
-            ? '游戏占画布约 72%，窄栏重新排版；无需预留音乐栏。'
-            : '右侧聊天与 SC 轮播 · 左下礼物 · 正中偏上上舰。上舰干扰可覆盖全画面。';
+            ? '大画面与窄弹幕栏。'
+            : '聊天与 SC 位于右侧，礼物和上舰提示分别展示。';
     document.getElementById('nowPlayingHint').textContent =
       mode === 'classic'
-        ? '开启后，音乐位于左下角，直播时长与中英双 Logo 排列在右侧。'
-        : '可选悬浮音乐组件；关闭时不留空位，也不改变游戏大小。';
+        ? '音乐显示在左下角。'
+        : '显示悬浮音乐组件。';
   }
   function commit(next, persist) {
     mode = next;

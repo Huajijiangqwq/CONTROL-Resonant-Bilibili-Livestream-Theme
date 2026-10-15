@@ -352,7 +352,7 @@
     status({ ready, busy }) {
       for (const id of ['timerToggle', 'timerReset', 'timerApply']) $(id).disabled = !ready || busy;
       $('timerHint').textContent = ready
-        ? '程序与 OBS 共用计时；暂停、继续、归零和修改时长实时同步。'
+        ? ''
         : '正在重新连接计时服务；连接恢复后自动同步。';
     },
   });
@@ -381,7 +381,7 @@
     if (!await timerCommand('set', { elapsedMs: value })) return;
     $('timerOffset').value = LiveState.format(value);
     $('timerOffset').removeAttribute('aria-invalid');
-    $('timerHint').textContent = '已同步到程序与 OBS，刷新后保留计时状态。';
+    $('timerHint').textContent = '计时已更新。';
     syncTimer();
     persist();
     tell(

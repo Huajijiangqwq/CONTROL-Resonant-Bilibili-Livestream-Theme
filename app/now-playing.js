@@ -185,8 +185,8 @@
     $('demoMode').setAttribute('aria-pressed', String(demo));
     $('liveMode').setAttribute('aria-pressed', String(!demo));
     $('previewNote').textContent = demo
-      ? '当前为合成演示：曲目信息为示例，240 频带为程序合成信号，不播放声音。'
-      : '当前为真实曲目信息。频谱独立捕获所选音源，OBS 中也能接收。';
+      ? '演示模式 · 不播放声音'
+      : '';
     renderer.replay(performance.now());
     syncTrack();
   }
@@ -271,7 +271,7 @@
     }
     $('musicStatus').textContent =
       state.musicError ||
-      (track.connected ? (settings.musicProvider === 'builtin' ? ($('musicProvider').dataset.builtinLabel||'内置识别')+' · 自动同步歌曲和进度' : '已连接 Now Playing · 自动同步歌曲和进度') : '正在连接歌曲服务…');
+      (track.connected ? (settings.musicProvider === 'builtin' ? ($('musicProvider').dataset.builtinLabel||'内置识别')+' · 自动同步歌曲和进度' : '歌曲服务已连接') : '正在连接歌曲服务…');
     syncTrack();
   }
   const events = new EventSource(base + '/events');
@@ -283,7 +283,7 @@
     track = JSON.parse(event.data);
     syncTrack();
     $('musicStatus').textContent = track.connected
-      ? (settings.musicProvider === 'builtin' ? ($('musicProvider').dataset.builtinLabel||'内置识别')+' · 自动同步歌曲和进度' : '已连接 Now Playing · 自动同步歌曲和进度')
+      ? (settings.musicProvider === 'builtin' ? ($('musicProvider').dataset.builtinLabel||'内置识别')+' · 自动同步歌曲和进度' : '歌曲服务已连接')
       : '歌曲服务已断开，请检查软件是否打开。';
   });
   events.addEventListener('audio', (event) => {

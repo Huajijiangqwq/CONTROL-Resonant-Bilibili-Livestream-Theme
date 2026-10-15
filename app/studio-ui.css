@@ -81,3 +81,6 @@ html[data-workspace-host=true] .app-return-link{display:none!important}
 .local-message-section:has(#localControls[hidden]){display:none}
 @media(max-width:620px){html[data-studio=music]:not(.obs) main{display:block;height:auto}html[data-studio=music]:not(.obs) aside{border-left:0;border-top:1px solid var(--ui-line)}}
 @media(prefers-reduced-motion:reduce){html[data-studio] :is(.studio-header,.appbar,aside) :is(button,a,input){transition:none!important}}
+
+/* Status placeholders take no space until there is a message to display. */
+p.hint:empty,p.preview-note:empty{display:none}
