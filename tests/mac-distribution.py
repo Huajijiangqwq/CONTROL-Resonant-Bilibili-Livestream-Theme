@@ -196,6 +196,27 @@ class DistributionTests(unittest.TestCase):
             self.assertEqual(binary.create_system, 3); self.assertEqual(binary.external_attr >> 16, stat.S_IFREG | 0o755)
             link = archive.getinfo(prefix + build.APP + 'Contents/Frameworks/Fixture.framework/Versions/Current')
             self.assertTrue(stat.S_ISLNK(link.external_attr >> 16)); self.assertEqual(archive.read(link), b'A')
+            self.assertIn(prefix + 'prepare-mac.sh', archive.namelist())
+            self.assertIn(prefix + '修复并打开.command', archive.namelist())
+
+        # The same source built natively must ship an app ready for installation,
+        # without the old first-run repair tools. Apple tools remain mocked here;
+        # actual signing and launching are verified by the macOS CI job.
+        with patch.object(build, 'ROOT', source_root), patch.object(build.sys, 'platform', 'darwin'), \
+             patch.object(build.sys, 'argv', arguments), patch.object(build.subprocess, 'run') as run, \
+             patch.object(Path, 'symlink_to'), patch.object(build, 'replace_bundle_entries', side_effect=lambda entries, folder: entries), \
+             patch.object(build, 'create_dmg', return_value={}), contextlib.redirect_stdout(io.StringIO()):
+            build.main()
+            self.assertTrue(any(call.args[0][0:2] == ['/bin/bash', str(source_root / 'scripts/prepare-mac.sh')]
+                                for call in run.call_args_list))
+        target = output / 'ControlResonant-1.2.3-mac-arm64.zip'
+        prefix = target.stem + '/'
+        with zipfile.ZipFile(target) as archive:
+            self.assertIn(prefix + 'README-macOS.md', archive.namelist())
+            self.assertNotIn(prefix + 'prepare-mac.sh', archive.namelist())
+            self.assertNotIn(prefix + '修复并打开.command', archive.namelist())
+            info = json.loads(archive.read(prefix + 'BUILD-INFO.json'))
+            self.assertFalse(info['requiresLocalPreparation'])
 
 
 if __name__ == '__main__':

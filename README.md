@@ -41,9 +41,9 @@
 | **Mac Intel** | `ControlResonant-1.0.2-mac-x64.dmg` | 打开 DMG，将 `Control Resonant.app` 拖入 Applications。 |
 | **源码** | `control-resonant-bilibili-theme-1.0.2.zip` | 用于开发或自行构建；普通使用请选择客户端。 |
 
-下载入口为仓库的 [Releases](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/releases)。若所需版本尚未发布，Mac 原生构建可从 [1.0.2 构建记录](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/actions/runs/38422212063) 页面底部的 **Artifacts** 获取：Apple 芯片选 `ControlResonant-mac-arm64`，Intel 选 `ControlResonant-mac-x64`，解压下载结果后取其中的 DMG 或 ZIP。下载 Actions 附件需要登录 GitHub，附件有保留期限。
+下载入口为仓库的 [Releases](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/releases)。若所需版本尚未发布，Mac 原生构建可从 [Build macOS](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/actions/workflows/macos.yml) 中选择对应版本、提交且检查成功的记录，在页面底部的 **Artifacts** 获取：Apple 芯片选 `ControlResonant-mac-arm64`，Intel 选 `ControlResonant-mac-x64`，解压下载结果后取其中的 DMG 或 ZIP。下载 Actions 附件需要登录 GitHub，附件有保留期限。
 
-**Mac mini M4 选择 arm64。** Mac 目标系统为 macOS 14.2+；客户端已经包含运行环境。原生 Mac 包使用临时签名（ad-hoc），尚未完成 Apple Developer ID 签名与公证，系统可能仍显示安全提示，详见 [Mac 使用说明](docs/macOS.md)。早期 `-setup.zip` 的准备步骤仅适用于旧包。
+**Mac mini M4 选择 arm64。** Mac 目标系统为 macOS 14.2+；客户端已经包含运行环境。原生 Mac 包使用临时签名（ad-hoc），尚未完成 Apple Developer ID 签名与公证，系统可能仍显示安全提示，详见 [Mac 使用说明](docs/macOS.md)。
 
 ### 接入直播与 OBS
 
@@ -153,7 +153,7 @@ Mac 包与 Windows 使用同一份 1.0.2 界面和主题代码，包含 Music / 
 
 - **244 项自动测试通过**，覆盖旧主题兼容、游戏比例与保存、透明开孔以及 OBS 安装与同步接口。
 - 编辑器实测了预设切换、自定义分辨率、锁定与自由缩放、多个窗口、编组缩放、撤销重做、保存重开，以及应用后直播输出的更新。
-- [本版 Mac 构建](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/actions/runs/38422212063) 的 arm64 与 x64 均通过原生打包、签名与 DMG 检查，以及应用窗口、本地服务和钥匙串初始化检查。
+- [本版 Mac 构建记录](https://github.com/Huajijiangqwq/CONTROL-Resonant-Bilibili-Livestream-Theme/actions/workflows/macos.yml) 的 arm64 与 x64 均通过原生打包、签名与 DMG 检查，以及应用窗口、本地服务和钥匙串初始化检查。
 
 OBS 同步接口使用隔离的模拟连接验证；Mac 云端启动检查不代表用户设备上的游戏采集、音乐播放或系统音频权限已验证。反馈这些功能的问题时，请注明实际设备与连接方式。
 

@@ -48,7 +48,6 @@ function collect(dir) {
 function sourceFiles() { return [...rootFiles, ...roots.flatMap(collect)].sort(); }
 function runtimeExcluded(rel) {
   return /^(?:tests|scripts|\.github)\//.test(rel) ||
-    /^docs\/Beta1发布核对\.md$/.test(rel) ||
     /^(?:\.git|\.prettier|启动全部服务\.cmd|停止全部服务\.cmd|扫码登录哔哩哔哩\.cmd)/.test(rel) ||
     (rel.startsWith('app/') && profile.developmentAsset(rel.slice(4)));
 }

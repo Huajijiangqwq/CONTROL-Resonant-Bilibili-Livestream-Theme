@@ -216,9 +216,12 @@ def main():
                 if replaced not in entries and replaced+'/' not in entries:
                     raise ValueError('Unresolved framework link: '+name)
     entries['README-macOS.md']=((ROOT/'docs/macOS.md').read_bytes(),stat.S_IFREG|0o644)
-    entries['prepare-mac.sh']=((ROOT/'scripts/prepare-mac.sh').read_bytes().replace(b'\r\n',b'\n'),stat.S_IFREG|0o755)
-    entries['修复并打开.command']=((ROOT/'scripts/repair-mac.command').read_bytes().replace(b'\r\n',b'\n'),stat.S_IFREG|0o755)
     native=sys.platform=='darwin'
+    # Native packages are signed during the build; first-run repair helpers are
+    # only needed by the explicitly requested cross-platform preparation kit.
+    if not native:
+        entries['prepare-mac.sh']=((ROOT/'scripts/prepare-mac.sh').read_bytes().replace(b'\r\n',b'\n'),stat.S_IFREG|0o755)
+        entries['修复并打开.command']=((ROOT/'scripts/repair-mac.command').read_bytes().replace(b'\r\n',b'\n'),stat.S_IFREG|0o755)
     metadata={'version':pkg['version'],'arch':args.arch,'minimumMacOS':'14.2','electron':pkg['devDependencies']['electron'],
         'buildHost':sys.platform,'bundleSignature':'ad-hoc' if native else 'requires-local-signing',
         'requiresLocalPreparation':not native,

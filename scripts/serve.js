@@ -120,7 +120,7 @@ async function main() {
     JSON.stringify({ ...release, stopToken }),
     { mode: 0o600 },
   );
-  console.log(`Beta 1 已启动：http://127.0.0.1:${port}/theme-editor.html`);
+  console.log(`Control Resonant ${version} 已启动：http://127.0.0.1:${port}/live.html`);
   console.log(
     previewOnly
       ? '仅预览模式：不启动直播接入或音频捕获。'
